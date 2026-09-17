@@ -24,11 +24,7 @@ jobs:
 
       - name: Install SDK platform & build-tools
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls -la "$ANDROID_HOME" || true
-          ls -la "$ANDROID_HOME/cmdline-tools" || true
-          SDKMANAGER=$(find "$ANDROID_HOME" -maxdepth 4 -name sdkmanager -type f 2>/dev/null | sort -r | head -n1)
-          echo "Using $SDKMANAGER"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses > /dev/null || true
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
 
@@ -47,6 +43,7 @@ jobs:
 
       - name: Publish release with APK
         if: github.event_name == 'push'
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-${{ github.run_number }}
