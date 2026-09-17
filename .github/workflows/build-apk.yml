@@ -44,13 +44,22 @@ jobs:
       - name: Publish release with APK
         if: github.event_name == 'push'
         continue-on-error: true
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: apk-${{ github.run_number }}
-          name: Sumo Rater APK (build ${{ github.run_number }})
-          body: |
-            Debug-signed APK built from commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
-            Install by downloading `app-debug.apk` below and opening it on your phone
-            (you may need to allow "install unknown apps" for your browser/file manager).
-          files: app/build/outputs/apk/debug/app-debug.apk
-          prerelease: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="apk-${{ github.run_number }}"
+          NOTES="Debug-signed APK built from commit ${{ github.sha }} on branch \`${{ github.ref_name }}\`. Install by downloading \`app-debug.apk\` below and opening it on your phone (you may need to allow \"install unknown apps\" for your browser/file manager)."
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          for attempt in 1 2 3; do
+            if gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk \
+              --title "Sumo Rater APK (build ${{ github.run_number }})" \
+              --notes "$NOTES" \
+              --prerelease; then
+              echo "Release published on attempt $attempt."
+              exit 0
+            fi
+            echo "Attempt $attempt failed, retrying in 15s..."
+            gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+            sleep 15
+          done
+          echo "::warning::Failed to publish release after 3 attempts; APK is still available as a workflow artifact."
