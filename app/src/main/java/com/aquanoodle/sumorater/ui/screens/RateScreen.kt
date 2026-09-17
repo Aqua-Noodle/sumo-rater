@@ -12,14 +12,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButton
@@ -55,6 +57,13 @@ private const val SWIPE_THRESHOLD_DP = 70f
 private const val FLY_DISTANCE_DP = 520f
 private const val ENTER_OFFSET_DP = 90f
 
+// Must match WheelPicker's fixed viewport height (its selected row is always
+// centered within it) and the photo size below, so the photo, the dash, and
+// the wheels' selected numbers all line up on the same horizontal line.
+private const val WHEEL_VIEWPORT_DP = 192
+private const val PHOTO_HEIGHT_DP = 118
+private const val PHOTO_TOP_OFFSET_DP = (WHEEL_VIEWPORT_DP - PHOTO_HEIGHT_DP) / 2
+
 @Composable
 fun RateScreen(
     bouts: List<Bout>,
@@ -87,7 +96,8 @@ fun RateScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.bg),
+            .background(colors.bg)
+            .windowInsetsPadding(WindowInsets.systemBars),
     ) {
         TopBar(progressLabel = progressLabel, onOpenMenu = onOpenMenu)
 
@@ -325,7 +335,12 @@ private fun BoutCard(
                     this.alpha = alpha.value
                 },
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
+            // Top-aligned: the wheel's selected row always sits at its own vertical
+            // center (WHEEL_VIEWPORT_DP / 2), so every sibling is pinned to line up
+            // with that same height explicitly, instead of relying on Row's default
+            // centering (which would center the *whole* photo+name+rank column, not
+            // just the photo, and drift out of line with the wheel).
+            verticalAlignment = Alignment.Top,
         ) {
             RikishiColumn(name = bout.winnerName, rank = bout.winnerRank, photoPath = photos[bout.winnerId], onPhotoTap = { onPhotoTap(bout.winnerId) })
 
@@ -335,19 +350,21 @@ private fun BoutCard(
                 items = winnerItems,
                 targetIndex = winnerTarget,
                 onSettledIndexChange = onWinnerSettled,
-                modifier = Modifier
-                    .align(Alignment.Top)
-                    .offset(y = (-30).dp),
             )
 
             Box(
                 modifier = Modifier
-                    .align(Alignment.Top)
-                    .offset(y = (-30).dp)
                     .width(18.dp)
-                    .height(3.dp)
-                    .background(LocalSumoColors.current.ink),
-            )
+                    .height(WHEEL_VIEWPORT_DP.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(LocalSumoColors.current.ink),
+                )
+            }
 
             val loserMax = w ?: 11
             val loserItems = remember(loserMax) { ((loserMax - 1) downTo 0).map { it.toString() } + "" }
@@ -356,9 +373,6 @@ private fun BoutCard(
                 items = loserItems,
                 targetIndex = loserTarget,
                 onSettledIndexChange = onLoserSettled,
-                modifier = Modifier
-                    .align(Alignment.Top)
-                    .offset(y = (-30).dp),
             )
 
             RikishiColumn(name = bout.loserName, rank = bout.loserRank, photoPath = photos[bout.loserId], onPhotoTap = { onPhotoTap(bout.loserId) })
@@ -381,13 +395,15 @@ private fun BoutCard(
 private fun RikishiColumn(name: String, rank: String, photoPath: String?, onPhotoTap: () -> Unit) {
     val colors = LocalSumoColors.current
     Column(
-        modifier = Modifier.width(104.dp),
+        modifier = Modifier
+            .width(104.dp)
+            .padding(top = PHOTO_TOP_OFFSET_DP.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         RikishiPhoto(
             photoPath = photoPath,
             onClick = onPhotoTap,
-            modifier = Modifier.size(width = 92.dp, height = 118.dp),
+            modifier = Modifier.size(width = 92.dp, height = PHOTO_HEIGHT_DP.dp),
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(

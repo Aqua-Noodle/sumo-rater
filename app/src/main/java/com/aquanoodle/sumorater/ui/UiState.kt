@@ -4,10 +4,10 @@ import com.aquanoodle.sumorater.data.Bout
 import com.aquanoodle.sumorater.data.ChartMode
 import com.aquanoodle.sumorater.data.Rating
 
-enum class Screen { RATE, MENU, TABLE, DETAIL }
+enum class Screen { START, RATE, MENU, TABLE, DETAIL }
 
 data class UiState(
-    val screen: Screen = Screen.RATE,
+    val screen: Screen = Screen.START,
     val idx: Int = 0,
     val w: Int? = null,
     val l: Int? = null,

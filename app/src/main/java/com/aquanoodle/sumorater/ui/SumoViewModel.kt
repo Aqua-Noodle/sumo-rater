@@ -49,8 +49,16 @@ class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
                 photos = photos,
                 initialized = true,
             )
-            loadDay()
+            // Deliberately no loadDay() here: the Start screen lets the user pick
+            // a basho/day first, so nothing about a bout is fetched or shown
+            // until they explicitly choose to rate it.
         }
+    }
+
+    /** User confirmed the basho/day shown on the Start screen; begin rating. */
+    fun enterRate() {
+        state = state.copy(screen = Screen.RATE)
+        loadDay()
     }
 
     fun currentBout(): Bout? = state.bouts.getOrNull(state.idx)

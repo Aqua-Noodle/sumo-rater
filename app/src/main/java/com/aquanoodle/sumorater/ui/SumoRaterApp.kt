@@ -26,6 +26,7 @@ import com.aquanoodle.sumorater.data.copyPhotoToInternalStorage
 import com.aquanoodle.sumorater.ui.screens.DetailScreen
 import com.aquanoodle.sumorater.ui.screens.MenuScreen
 import com.aquanoodle.sumorater.ui.screens.RateScreen
+import com.aquanoodle.sumorater.ui.screens.StartScreen
 import com.aquanoodle.sumorater.ui.screens.TableScreen
 import com.aquanoodle.sumorater.ui.theme.LocalSumoColors
 import com.aquanoodle.sumorater.ui.theme.SumoRaterTheme
@@ -72,6 +73,17 @@ fun SumoRaterApp() {
         }
 
         when (state.screen) {
+            Screen.START -> StartScreen(
+                bashoLabel = bashoLabel(state.bashoId),
+                bashoList = remember { bashoList() },
+                day = state.day,
+                ratedRikishi = viewModel.perRikishiMap().size,
+                onPickBasho = viewModel::pickBasho,
+                onPickDay = viewModel::pickDay,
+                onStart = viewModel::enterRate,
+                onOpenTable = viewModel::openTable,
+            )
+
             Screen.RATE -> RateScreen(
                 bouts = state.bouts,
                 idx = state.idx,
@@ -91,7 +103,6 @@ fun SumoRaterApp() {
 
             Screen.MENU -> MenuScreen(
                 ratedRikishi = viewModel.perRikishiMap().size,
-                bashoId = state.bashoId,
                 bashoLabel = bashoLabel(state.bashoId),
                 bashoList = remember { bashoList() },
                 day = state.day,
