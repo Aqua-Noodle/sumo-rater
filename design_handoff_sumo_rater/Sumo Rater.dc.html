@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="./image-slot.js"></script>
+<style>
+html,body{height:100%}body{margin:0;background:#f4f1eb;font-family:Archivo,Helvetica,sans-serif;color:#141311}
+a{color:#141311}a:hover{color:#5a564f}
+*::-webkit-scrollbar{display:none}
+</style>
+</helmet>
+<div style="height:100dvh;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--ink);font-family:Archivo,Helvetica,sans-serif;position:relative;overflow:hidden;--bg: {{ c.bg }};--ink: {{ c.ink }};--mute: {{ c.mute }};--faint: {{ c.faint }};--line: {{ c.line }}">
+
+<!-- RATE -->
+<sc-if value="{{ isRate }}" hint-placeholder-val="{{ true }}">
+<div style="height:100%;display:flex;flex-direction:column">
+  <div style="display:flex;align-items:center;height:56px;padding:0 8px;flex:none">
+    <button onClick="{{ openMenu }}" aria-label="Menu" style="width:48px;height:48px;border:0;background:none;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;cursor:pointer;padding:0">
+      <span style="display:block;width:20px;height:2px;background:var(--ink)"></span>
+      <span style="display:block;width:20px;height:2px;background:var(--ink)"></span>
+      <span style="display:block;width:20px;height:2px;background:var(--ink)"></span>
+    </button>
+    <div style="flex:1;text-align:center;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);font-variant-numeric:tabular-nums">{{ progressLabel }}</div>
+    <div style="width:48px"></div>
+  </div>
+
+  <sc-if value="{{ hasBout }}" hint-placeholder-val="{{ true }}">
+  <div onPointerDown="{{ onPointerDown }}" onPointerMove="{{ onPointerMove }}" onPointerUp="{{ onPointerUp }}" onPointerCancel="{{ onPointerUp }}" onPointerLeave="{{ onPointerUp }}" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 12px 40px;touch-action:pan-y;user-select:none">
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;will-change:transform;transform: {{ cardT }};transition: {{ cardTr }};opacity: {{ cardO }}">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:92px">
+        <image-slot id="ph-{{ bout.winnerId }}" src="{{ silhouette }}" shape="rounded" radius="6" placeholder="photo" style="width:92px;height:118px"></image-slot>
+        <div style="text-align:center;width:104px">
+          <div style="font-size:14px;font-weight:600;line-height:1.15;text-wrap:balance">{{ bout.winnerName }}</div>
+          <div style="font-size:11px;color:var(--mute);margin-top:2px;letter-spacing:.04em">{{ bout.winnerRank }}</div>
+        </div>
+      </div>
+
+      <div ref="{{ wRef }}" onScroll="{{ onWheelW }}" style="height:192px;width:60px;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;mask-image:linear-gradient(transparent,#000 33%,#000 67%,transparent);-webkit-mask-image:linear-gradient(transparent,#000 33%,#000 67%,transparent);align-self:flex-start;margin-top:-30px">
+        <div style="height:64px"></div>
+        <sc-for list="{{ winnerOpts }}" as="n" hint-placeholder-count="11">
+          <div style="height:64px;display:flex;align-items:center;justify-content:center;scroll-snap-align:center;font-size:46px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.03em">{{ n }}</div>
+        </sc-for>
+        <div style="height:64px"></div>
+      </div>
+
+      <div style="width:18px;height:3px;background:var(--ink);margin-top:-30px;flex:none"></div>
+
+      <div ref="{{ lRef }}" onScroll="{{ onWheelL }}" style="height:192px;width:60px;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;mask-image:linear-gradient(transparent,#000 33%,#000 67%,transparent);-webkit-mask-image:linear-gradient(transparent,#000 33%,#000 67%,transparent);align-self:flex-start;margin-top:-30px">
+        <div style="height:64px"></div>
+        <sc-for list="{{ loserOpts }}" as="n" hint-placeholder-count="6">
+          <div style="height:64px;display:flex;align-items:center;justify-content:center;scroll-snap-align:center;font-size:46px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.03em">{{ n }}</div>
+        </sc-for>
+        <div style="height:64px"></div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:92px">
+        <image-slot id="ph-{{ bout.loserId }}" src="{{ silhouette }}" shape="rounded" radius="6" placeholder="photo" style="width:92px;height:118px"></image-slot>
+        <div style="text-align:center;width:104px">
+          <div style="font-size:14px;font-weight:600;line-height:1.15;text-wrap:balance">{{ bout.loserName }}</div>
+          <div style="font-size:11px;color:var(--mute);margin-top:2px;letter-spacing:.04em">{{ bout.loserRank }}</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:center;gap:66px;margin-top:4px;font-size:10px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase">
+      <span>win</span><span>loss</span>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:0 32px;text-align:center">
+    <div style="font-size:28px;font-weight:600;letter-spacing:-.02em">{{ bashoName }} · Day {{ day }} done</div>
+    <div style="font-size:14px;color:var(--mute)">{{ ratedCount }} bouts rated on this phone.</div>
+    <button onClick="{{ openTable }}" style="margin-top:12px;border:1px solid var(--ink);background:none;padding:12px 20px;font:500 14px Archivo,sans-serif;cursor:pointer;color:var(--ink)">View my ratings</button>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:0 32px;text-align:center">
+    <div style="font-size:14px;color:var(--mute);line-height:1.5">{{ emptyMsg }}</div>
+    <button onClick="{{ openMenu }}" style="margin-top:12px;border:1px solid var(--ink);background:none;padding:12px 20px;font:500 14px Archivo,sans-serif;cursor:pointer;color:var(--ink)">Pick another day</button>
+  </div>
+  </sc-if>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:0 12px 16px;flex:none">
+    <sc-if value="{{ canBack }}" hint-placeholder-val="{{ false }}">
+      <button onClick="{{ back }}" style="border:0;background:none;padding:12px;font:500 15px Archivo,sans-serif;color:var(--faint);cursor:pointer;min-height:48px">← Back</button>
+    </sc-if>
+    <sc-if value="{{ noBack }}" hint-placeholder-val="{{ true }}"><span></span></sc-if>
+    <sc-if value="{{ hasBout }}" hint-placeholder-val="{{ true }}">
+      <button onClick="{{ next }}" style="border:0;background:none;padding:12px;font:600 17px Archivo,sans-serif;color:var(--ink);cursor:pointer;min-height:48px">Next →</button>
+    </sc-if>
+  </div>
+</div>
+</sc-if>
+
+<!-- MENU -->
+<sc-if value="{{ isMenu }}" hint-placeholder-val="{{ false }}">
+<div style="height:100%;display:flex;flex-direction:column">
+  <div style="display:flex;align-items:center;height:56px;padding:0 8px;flex:none">
+    <button onClick="{{ openRate }}" aria-label="Close" style="width:48px;height:48px;border:0;background:none;font-size:22px;cursor:pointer;color:var(--ink)">×</button>
+    <div style="flex:1"></div>
+  </div>
+  <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column">
+    <button onClick="{{ openTable }}" style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border:0;border-top:1px solid var(--line);background:none;cursor:pointer;font:600 18px Archivo,sans-serif;color:var(--ink);text-align:left">
+      <span>My ratings</span><span style="font-size:13px;color:var(--faint);font-weight:400">{{ ratedRikishi }} rikishi →</span>
+    </button>
+
+    <div style="padding:18px 24px 6px;border-top:1px solid var(--line)">
+      <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:10px">Basho</div>
+      <select value="{{ bashoId }}" onChange="{{ pickBasho }}" style="width:100%;appearance:none;-webkit-appearance:none;border:1px solid var(--ink);background:none;color:var(--ink);padding:12px 14px;font:600 16px Archivo,sans-serif;border-radius:0">
+        <sc-for list="{{ bashoList }}" as="b" hint-placeholder-count="3"><option value="{{ b.id }}">{{ b.label }}</option></sc-for>
+      </select>
+    </div>
+    <div style="padding:14px 24px 18px">
+      <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:10px">Day</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">
+        <sc-for list="{{ days }}" as="d" hint-placeholder-count="15">
+          <button onClick="{{ d.pick }}" style="height:44px;border:1px solid var(--line);cursor:pointer;font:500 15px Archivo,sans-serif;font-variant-numeric:tabular-nums;background: {{ d.bg }};color: {{ d.fg }}">{{ d.n }}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <button onClick="{{ toggleTheme }}" style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border:0;border-top:1px solid var(--line);background:none;cursor:pointer;font:500 16px Archivo,sans-serif;color:var(--ink);text-align:left">
+      <span>Dark mode</span>
+      <span style="width:40px;height:22px;border:1px solid var(--ink);border-radius:11px;position:relative;display:block">
+        <span style="position:absolute;top:3px;width:14px;height:14px;border-radius:7px;background:var(--ink);left: {{ knobLeft }}"></span>
+      </span>
+    </button>
+    <div style="margin-top:auto;padding:18px 24px 24px;font-size:11px;color:var(--faint);line-height:1.5">Ratings are stored on this phone only.</div>
+  </div>
+</div>
+</sc-if>
+
+<!-- TABLE -->
+<sc-if value="{{ isTable }}" hint-placeholder-val="{{ false }}">
+<div style="height:100%;display:flex;flex-direction:column">
+  <div style="display:flex;align-items:center;height:56px;padding:0 8px;flex:none">
+    <button onClick="{{ openMenu }}" aria-label="Back" style="width:48px;height:48px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--ink)">←</button>
+    <div style="flex:1;text-align:center;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)">My ratings</div>
+    <div style="width:48px"></div>
+  </div>
+  <div style="display:flex;padding:8px 20px 6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)">
+    <span style="flex:1">Rikishi</span><span style="width:56px;text-align:right">Avg</span><span style="width:40px;text-align:right">N</span>
+  </div>
+  <div style="flex:1;overflow-y:auto">
+    <sc-for list="{{ tableRows }}" as="r" hint-placeholder-count="0">
+      <button onClick="{{ r.open }}" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:10px 20px;border:0;border-top:1px solid var(--line);background:none;cursor:pointer;font-family:Archivo,sans-serif;color:var(--ink)">
+        <image-slot id="ph-{{ r.id }}" src="{{ silhouette }}" shape="rounded" radius="4" placeholder=" " style="width:36px;height:46px;flex:none"></image-slot>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:15px;font-weight:600">{{ r.name }}</div>
+          <div style="font-size:11px;color:var(--mute);letter-spacing:.04em">{{ r.rank }}</div>
+        </div>
+        <div style="width:56px;text-align:right;font-size:20px;font-weight:600;font-variant-numeric:tabular-nums">{{ r.avg }}</div>
+        <div style="width:40px;text-align:right;font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums">{{ r.count }}</div>
+      </button>
+    </sc-for>
+    <sc-if value="{{ tableEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:48px 32px;text-align:center;color:var(--faint);font-size:14px;line-height:1.5">No ratings yet. Rate a bout and the rikishi appear here.</div>
+    </sc-if>
+  </div>
+</div>
+</sc-if>
+
+<!-- DETAIL -->
+<sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+<div style="height:100%;display:flex;flex-direction:column">
+  <div style="display:flex;align-items:center;height:56px;padding:0 8px;flex:none">
+    <button onClick="{{ openTable }}" aria-label="Back" style="width:48px;height:48px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--ink)">←</button>
+    <div style="flex:1"></div>
+    <div style="width:48px"></div>
+  </div>
+  <div style="flex:1;overflow-y:auto">
+    <div style="display:flex;align-items:center;gap:16px;padding:0 20px 16px">
+      <image-slot id="ph-{{ detail.id }}" src="{{ silhouette }}" shape="rounded" radius="6" placeholder="photo" style="width:72px;height:92px;flex:none"></image-slot>
+      <div style="flex:1">
+        <div style="font-size:24px;font-weight:600;letter-spacing:-.02em;line-height:1.1">{{ detail.name }}</div>
+        <div style="font-size:12px;color:var(--mute);letter-spacing:.04em;margin-top:4px">{{ detail.rank }}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:1">{{ detail.avg }}</div>
+        <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-top:4px">avg · {{ detail.count }}</div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:0 20px 8px">
+      <span style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)">Rating over time</span>
+      <div style="display:flex;border:1px solid var(--ink)">
+        <button onClick="{{ modeDay }}" style="border:0;padding:6px 12px;font:500 11px Archivo,sans-serif;cursor:pointer;background: {{ dayBg }};color: {{ dayFg }}">Days</button>
+        <button onClick="{{ modeBasho }}" style="border:0;padding:6px 12px;font:500 11px Archivo,sans-serif;cursor:pointer;background: {{ bashoBg }};color: {{ bashoFg }}">Basho</button>
+      </div>
+    </div>
+    <div style="padding:0 20px 8px">
+      <svg viewBox="0 0 340 150" width="100%" style="display:block;overflow:visible">
+        <line x1="24" y1="10" x2="340" y2="10" stroke="var(--line)" stroke-width="1"></line>
+        <line x1="24" y1="70" x2="340" y2="70" stroke="var(--line)" stroke-width="1"></line>
+        <line x1="24" y1="130" x2="340" y2="130" stroke="var(--line)" stroke-width="1"></line>
+        <text x="0" y="14" font-size="10" fill="var(--faint)" font-family="Archivo,sans-serif">10</text>
+        <text x="0" y="74" font-size="10" fill="var(--faint)" font-family="Archivo,sans-serif">5</text>
+        <text x="0" y="134" font-size="10" fill="var(--faint)" font-family="Archivo,sans-serif">0</text>
+        <polyline points="{{ chart.points }}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+        <sc-for list="{{ chart.dots }}" as="d" hint-placeholder-count="0">
+          <circle cx="{{ d.x }}" cy="{{ d.y }}" r="3.5" fill="{{ d.fill }}" stroke="var(--ink)" stroke-width="1.5"></circle>
+        </sc-for>
+        <text x="24" y="148" font-size="10" fill="var(--faint)" font-family="Archivo,sans-serif">{{ chart.first }}</text>
+        <text x="340" y="148" font-size="10" fill="var(--faint)" text-anchor="end" font-family="Archivo,sans-serif">{{ chart.last }}</text>
+      </svg>
+    </div>
+
+    <div style="display:flex;flex-direction:column;padding:8px 0 24px">
+      <sc-for list="{{ detail.rows }}" as="r" hint-placeholder-count="0">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-top:1px solid var(--line);background: {{ r.bg }};color: {{ r.fg }}">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600">vs {{ r.opp }}</div>
+            <div style="font-size:11px;opacity:.7;letter-spacing:.04em;margin-top:2px">{{ r.when }}</div>
+          </div>
+          <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.7">{{ r.result }}</div>
+          <div style="width:40px;text-align:right;font-size:24px;font-weight:600;font-variant-numeric:tabular-nums">{{ r.rating }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;liveApi&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Data&quot;}}">
+const RANKS = { Yokozuna: 'Y', Ozeki: 'O', Sekiwake: 'S', Komusubi: 'K', Maegashira: 'M', Juryo: 'J' };
+const shortRank = r => { const m = /^(\w+)\s*(\d*)\s*(East|West)?/.exec(r || ''); if (!m) return r || ''; return (RANKS[m[1]] || m[1]) + (m[2] || '') + (m[3] ? m[3][0].toLowerCase() : ''); };
+const BASHO_NAME = { '01': 'Hatsu', '03': 'Haru', '05': 'Natsu', '07': 'Nagoya', '09': 'Aki', '11': 'Kyushu' };
+const bashoLabel = id => `${BASHO_NAME[id.slice(4)] || id} ${id.slice(0, 4)}`;
+const DIVS = ['Juryo', 'Makuuchi'];
+const THEMES = {
+  light: { desk: '#dcd8cf', bg: '#f4f1eb', ink: '#141311', mute: '#5a564f', faint: '#9a958b', line: '#e4e0d7' },
+  dark: { desk: '#0c0c0b', bg: '#161513', ink: '#f1ede6', mute: '#a8a39a', faint: '#6e6a63', line: '#2a2926' },
+};
+// Bundled fallback so the prototype works offline: Aki 2026 day 5 — [winnerId, winnerName, winnerRank, loserId, loserName, loserRank]
+const SAMPLE = {
+  '202609-5': {
+    Juryo: [
+      [101, 'Shishi', 'Juryo 1 East', 102, 'Asakoryu', 'Juryo 1 West'], [103, 'Hakuoho', 'Juryo 2 East', 104, 'Tokihayate', 'Juryo 2 West'],
+      [105, 'Kayo', 'Juryo 3 East', 106, 'Nishikigi', 'Juryo 3 West'], [107, 'Roga', 'Juryo 4 East', 108, 'Shimazuumi', 'Juryo 4 West'],
+      [110, 'Tamashoho', 'Juryo 5 West', 109, 'Kotoshoho', 'Juryo 5 East'], [111, 'Tochitaikai', 'Juryo 6 East', 112, 'Mitakeumi', 'Juryo 6 West'],
+      [113, 'Kagayaki', 'Juryo 7 East', 114, 'Daiamami', 'Juryo 7 West'], [116, 'Shonannoumi', 'Juryo 8 West', 115, 'Tsurugisho', 'Juryo 8 East'],
+      [117, 'Bushozan', 'Juryo 9 East', 118, 'Ryuden', 'Juryo 9 West'], [119, 'Kitanowaka', 'Juryo 10 East', 120, 'Hokutofuji', 'Juryo 10 West'],
+    ],
+    Makuuchi: [
+      [209, 'Ichiyamamoto', 'Maegashira 8 East', 210, 'Tamawashi', 'Maegashira 8 West'], [208, 'Midorifuji', 'Maegashira 7 West', 207, 'Churanoumi', 'Maegashira 7 East'],
+      [205, 'Kinbozan', 'Maegashira 6 East', 206, 'Meisei', 'Maegashira 6 West'], [203, 'Atamifuji', 'Maegashira 5 East', 204, 'Gonoyama', 'Maegashira 5 West'],
+      [201, 'Hiradoumi', 'Maegashira 4 East', 202, 'Ura', 'Maegashira 4 West'], [211, 'Takerufuji', 'Komusubi 1 East', 212, 'Tobizaru', 'Maegashira 3 West'],
+      [213, 'Aonishiki', 'Sekiwake 1 East', 214, 'Oho', 'Maegashira 3 East'], [215, 'Kirishima', 'Ozeki 1 West', 216, 'Daieisho', 'Maegashira 1 West'],
+      [217, 'Kotozakura', 'Ozeki 1 East', 218, 'Wakatakakage', 'Maegashira 2 East'], [219, 'Hoshoryu', 'Yokozuna 1 West', 220, 'Takayasu', 'Maegashira 1 East'],
+      [221, 'Onosato', 'Yokozuna 1 East', 222, 'Abi', 'Maegashira 2 West'],
+    ],
+  },
+};
+const KEY = 'sumo-rater.ratings.v1', POS = 'sumo-rater.pos.v1', THEME = 'sumo-rater.theme.v1', WHERE = 'sumo-rater.where.v1';
+const ROW = 64;
+// Most recent basho + day for a date: basho months 1,3,5,7,9,11; starts 2nd Sunday.
+function currentBashoDay(d = new Date()) {
+  const start = (y, m) => { const f = new Date(y, m - 1, 1).getDay(); return new Date(y, m - 1, 1 + ((7 - f) % 7) + 7); };
+  let y = d.getFullYear(), m = d.getMonth() + 1; if (m % 2 === 0) m -= 1;
+  let s = start(y, m);
+  if (d < s) { m -= 2; if (m < 1) { m = 11; y -= 1; } s = start(y, m); }
+  const day = Math.min(15, Math.floor((d - s) / 864e5) + 1);
+  return { bashoId: `${y}${String(m).padStart(2, '0')}`, day };
+}
+function silhouette(bg, fg) {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 92 118'><rect width='92' height='118' fill='${bg}'/><circle cx='46' cy='44' r='20' fill='${fg}'/><ellipse cx='46' cy='112' rx='36' ry='34' fill='${fg}'/></svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
+class Component extends DCLogic {
+  state = { screen: 'rate', idx: 0, w: 6, l: 4, ratings: {}, bouts: [], bashoId: '202609', day: 5, loading: false, selected: null, mode: 'day', theme: 'light' };
+  wRef = React.createRef(); lRef = React.createRef(); ignoreUntil = 0; pos = {};
+
+  componentDidMount() {
+    let ratings = {}, theme = 'light', where = currentBashoDay();
+    try {
+      ratings = JSON.parse(localStorage.getItem(KEY) || '{}'); this.pos = JSON.parse(localStorage.getItem(POS) || '{}');
+      theme = localStorage.getItem(THEME) || 'light'; where = JSON.parse(localStorage.getItem(WHERE) || 'null') || where;
+    } catch (e) {}
+    if (typeof this.pos !== 'object' || !this.pos) this.pos = {};
+    this.setState({ ratings, theme, bashoId: where.bashoId, day: where.day }, () => this.loadDay());
+  }
+  componentDidUpdate(_, prev) {
+    if (prev.idx !== this.state.idx || prev.screen !== this.state.screen || prev.bouts !== this.state.bouts) this.loadBout();
+    else if (prev.enter && !this.state.enter) this.scrollWheels();
+  }
+  toBouts(bashoId, day, src) {
+    return DIVS.flatMap(div => (src[div] || []).map((b, i) => ({
+      key: `${bashoId}-${day}-${div}-${i}`, bashoId, day, div,
+      winnerId: b[0], winnerName: b[1], winnerRank: shortRank(b[2]), loserId: b[3], loserName: b[4], loserRank: shortRank(b[5]),
+    })));
+  }
+  async loadDay() {
+    const { bashoId, day } = this.state, k = `${bashoId}-${day}`;
+    try { localStorage.setItem(WHERE, JSON.stringify({ bashoId, day })); } catch (e) {}
+    const useSample = () => this.setState({ bouts: SAMPLE[k] ? this.toBouts(bashoId, day, SAMPLE[k]) : [], idx: this.pos[k] || 0, loading: false }, () => this.loadBout());
+    if (this.props.liveApi === false) return useSample();
+    this.setState({ loading: true, bouts: [] });
+    try {
+      const res = await Promise.all(DIVS.map(d => fetch(`https://www.sumo-api.com/api/basho/${bashoId}/torikumi/${d}/${day}`).then(r => r.json())));
+      if (k !== `${this.state.bashoId}-${this.state.day}`) return;
+      const src = {};
+      res.forEach((r, i) => { src[DIVS[i]] = (r.torikumi || []).filter(m => m.winnerId).map(m => m.winnerId === m.eastId
+        ? [m.eastId, m.eastShikona, m.eastRank, m.westId, m.westShikona, m.westRank] : [m.westId, m.westShikona, m.westRank, m.eastId, m.eastShikona, m.eastRank]); });
+      if (src.Juryo.length || src.Makuuchi.length) this.setState({ bouts: this.toBouts(bashoId, day, src), idx: this.pos[k] || 0, loading: false }, () => this.loadBout());
+      else useSample();
+    } catch (e) { useSample(); }
+  }
+  loadBout() {
+    const b = this.state.bouts[this.state.idx]; if (!b || this.state.screen !== 'rate') return;
+    const saved = this.state.ratings[b.key];
+    let w, l;
+    if (saved) { w = saved.w; l = saved.l; } else { w = null; l = null; }
+    this.setState({ w, l }, () => this.scrollWheels());
+  }
+  wPos(w) { return (w == null ? 10 : 10 - w) * ROW; }
+  lPos(l, w) { const max = w == null ? 11 : w; return (l == null ? max : max - 1 - l) * ROW; }
+  scrollWheels(tries = 0) {
+    const we = this.wRef.current, le = this.lRef.current, retry = () => { if (tries < 120) requestAnimationFrame(() => this.scrollWheels(tries + 1)); };
+    if (!we || !le) return retry();
+    const wt = this.wPos(this.state.w), lt = this.lPos(this.state.l, this.state.w);
+    if (we.scrollHeight < wt + we.clientHeight || le.scrollHeight < lt + le.clientHeight) return retry();
+    this.ignoreUntil = Date.now() + 250;
+    we.scrollTop = wt; le.scrollTop = lt;
+    if (Math.abs(we.scrollTop - wt) > 1 || Math.abs(le.scrollTop - lt) > 1) retry();
+  }
+  onWheel(which, el) {
+    if (Date.now() < this.ignoreUntil) return;
+    clearTimeout(this['t' + which]);
+    this['t' + which] = setTimeout(() => {
+      const i = Math.round(el.scrollTop / ROW);
+      if (which === 'w') {
+        const w = i >= 10 ? null : Math.max(1, 10 - i);
+        if (w === this.state.w) return;
+        let l = this.state.l; if (w != null && l != null && l >= w) l = w - 1;
+        this.setState({ w, l }, () => { this.ignoreUntil = Date.now() + 200; if (this.lRef.current) this.lRef.current.scrollTop = this.lPos(l, w); });
+      } else {
+        const max = this.state.w == null ? 11 : this.state.w;
+        const l = i >= max ? null : Math.max(0, Math.min(max - 1, max - 1 - i));
+        if (l !== this.state.l) this.setState({ l });
+      }
+    }, 90);
+  }
+  save(next) {
+    const { bouts, idx, w, l, bashoId, day } = this.state, b = bouts[idx]; if (!b) return;
+    const ratings = { ...this.state.ratings };
+    if (w == null && l == null) delete ratings[b.key]; else ratings[b.key] = { ...b, w, l, ts: Date.now() };
+    const ni = Math.min(bouts.length, idx + (next ? 1 : 0));
+    this.pos[`${bashoId}-${day}`] = ni;
+    try { localStorage.setItem(KEY, JSON.stringify(ratings)); localStorage.setItem(POS, JSON.stringify(this.pos)); } catch (e) {}
+    this.setState({ ratings, idx: ni }, () => this.loadBout());
+  }
+  perRikishi() {
+    const map = {};
+    Object.values(this.state.ratings).forEach(r => {
+      const add = (id, name, rank, opp, won, rating) => { if (rating == null) return; (map[id] = map[id] || { id, name, list: [] }); map[id].name = name; map[id].list.push({ bashoId: r.bashoId, day: r.day, opp, won, rating, rank }); };
+      add(r.winnerId, r.winnerName, r.winnerRank, r.loserName, true, r.w);
+      add(r.loserId, r.loserName, r.loserRank, r.winnerName, false, r.l);
+    });
+    Object.values(map).forEach(m => { m.list.sort((a, b) => (a.bashoId + String(a.day).padStart(2, '0')).localeCompare(b.bashoId + String(b.day).padStart(2, '0'))); m.rank = m.list[m.list.length - 1].rank; m.count = m.list.length; m.avgN = m.list.reduce((a, b) => a + b.rating, 0) / m.count; m.avg = m.avgN.toFixed(1); });
+    return map;
+  }
+  chart(list) {
+    let pts;
+    if (this.state.mode === 'basho') { const g = {}; list.forEach(r => { (g[r.bashoId] = g[r.bashoId] || []).push(r.rating); }); pts = Object.keys(g).sort().map(k => ({ label: bashoLabel(k), v: g[k].reduce((a, b) => a + b, 0) / g[k].length, won: null })); }
+    else pts = list.map(r => ({ label: `${bashoLabel(r.bashoId)} d${r.day}`, v: r.rating, won: r.won }));
+    const n = pts.length, x = i => n < 2 ? 182 : 24 + i * (316 / (n - 1)), y = v => 10 + (10 - v) * 12;
+    return {
+      points: pts.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(' '),
+      dots: pts.map((p, i) => ({ x: x(i).toFixed(1), y: y(p.v).toFixed(1), fill: p.won === false ? 'var(--ink)' : 'var(--bg)' })),
+      first: pts[0] ? pts[0].label : '', last: n > 1 ? pts[n - 1].label : '',
+    };
+  }
+  bashoList() {
+    const now = currentBashoDay(), out = [];
+    for (let y = +now.bashoId.slice(0, 4); y >= 1958; y--) for (const m of ['11', '09', '07', '05', '03', '01']) { const id = `${y}${m}`; if (id <= now.bashoId) out.push({ id, label: bashoLabel(id) }); }
+    return out;
+  }
+  renderVals() {
+    const { screen, idx, bouts, w, ratings, selected, mode, day, bashoId, theme, loading, dx = 0, dragging = false, fly = null, enter = null } = this.state;
+    const c = THEMES[theme] || THEMES.light, isDark = theme === 'dark';
+    const bout = bouts[idx];
+    const per = screen === 'rate' || screen === 'menu' ? null : this.perRikishi();
+    const tableRows = per ? Object.values(per).sort((a, b) => b.avgN - a.avgN).map(r => ({ ...r, open: () => this.setState({ screen: 'detail', selected: r.id }) })) : [];
+    const sel = per && selected != null ? per[selected] : null;
+    const detail = sel ? { ...sel, rows: [...sel.list].reverse().map(r => ({ opp: r.opp, when: `${bashoLabel(r.bashoId)} · Day ${r.day}`, result: r.won ? 'win' : 'loss', rating: r.rating, bg: r.won ? '#ffffff' : '#000000', fg: r.won ? '#000000' : '#ffffff' })) } : { rows: [] };
+    const go = (patch) => this.setState({ ...patch, screen: 'rate', bouts: [], idx: 0 }, () => this.loadDay());
+    const loserMax = w == null ? 11 : w;
+    return {
+      c, isDark, silhouette: silhouette(isDark ? '#26251f' : '#e6e2d9', isDark ? '#3a3832' : '#cfcac0'),
+      isRate: screen === 'rate', isMenu: screen === 'menu', isTable: screen === 'table', isDetail: screen === 'detail',
+      hasBout: !!bout, isDone: bouts.length > 0 && !bout, isEmpty: bouts.length === 0, canBack: idx > 0 && !!bout, noBack: !(idx > 0 && !!bout),
+      day, bashoId, bashoName: bashoLabel(bashoId),
+      emptyMsg: loading ? 'Loading…' : `No bout data available for ${bashoLabel(bashoId)}, day ${day}.`,
+      bout: bout || {}, progressLabel: bout ? `${bout.div} · Day ${day} · ${idx + 1} / ${bouts.length}` : `${bashoLabel(bashoId)} · Day ${day}`,
+      winnerOpts: [...Array.from({ length: 10 }, (_, i) => 10 - i), ''], loserOpts: [...Array.from({ length: loserMax }, (_, i) => loserMax - 1 - i), ''],
+      onPointerDown: e => { if (this.state.fly) return; this.swipe = { x: e.clientX, y: e.clientY, id: e.pointerId, dead: false, dragging: false, dx: 0 }; },
+      onPointerMove: e => {
+        const s = this.swipe; if (!s || s.dead || e.pointerId !== s.id) return;
+        const dx = e.clientX - s.x, dy = e.clientY - s.y;
+        if (!s.dragging) { if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { s.dead = true; return; } if (Math.abs(dx) < 8) return; s.dragging = true; }
+        s.dx = dx; this.setState({ dragging: true, dx });
+      },
+      onPointerUp: () => {
+        const s = this.swipe; if (!s) return; this.swipe = null;
+        if (!s.dragging) { if (this.state.dragging) this.setState({ dragging: false, dx: 0 }); return; }
+        const d = s.dx, cur = this.state.idx;
+        if (Math.abs(d) > 70 && (d < 0 || cur > 0)) {
+          const dir = d < 0 ? 'left' : 'right';
+          this.setState({ dragging: false, dx: d, fly: dir });
+          setTimeout(() => { if (dir === 'left') this.save(true); else this.setState({ idx: cur - 1 }, () => this.loadBout()); this.setState({ fly: null, dx: 0, enter: dir }); requestAnimationFrame(() => requestAnimationFrame(() => this.setState({ enter: null }, () => this.scrollWheels()))); }, 220);
+        } else this.setState({ dragging: false, dx: 0 });
+      },
+      cardT: dragging ? `translateX(${dx}px) rotate(${(dx / 40).toFixed(2)}deg)` : fly ? `translateX(${fly === 'left' ? -520 : 520}px) rotate(${fly === 'left' ? -14 : 14}deg)` : enter ? `translateX(${enter === 'left' ? 90 : -90}px) rotate(${enter === 'left' ? 4 : -4}deg)` : 'translateX(0) rotate(0deg)',
+      cardTr: dragging || enter ? 'none' : fly ? 'transform .22s ease-in, opacity .22s ease-in' : 'transform .45s cubic-bezier(.34,1.56,.64,1), opacity .25s ease-out',
+      cardO: fly || enter ? 0 : 1,
+      wRef: this.wRef, lRef: this.lRef,
+      onWheelW: e => this.onWheel('w', e.currentTarget), onWheelL: e => this.onWheel('l', e.currentTarget),
+      next: () => this.save(true), back: () => this.setState({ idx: Math.max(0, idx - 1) }, () => this.loadBout()),
+      openMenu: () => this.setState({ screen: 'menu' }), openTable: () => this.setState({ screen: 'table' }), openRate: () => this.setState({ screen: 'rate' }, () => this.loadBout()),
+      ratedCount: Object.keys(ratings).length, ratedRikishi: Object.keys(this.perRikishi()).length,
+      bashoList: this.bashoList(), pickBasho: e => go({ bashoId: e.target.value, day: 1 }),
+      days: Array.from({ length: 15 }, (_, i) => ({ n: i + 1, pick: () => go({ day: i + 1 }), bg: i + 1 === day ? c.ink : 'transparent', fg: i + 1 === day ? c.bg : c.ink })),
+      toggleTheme: () => { const t = isDark ? 'light' : 'dark'; try { localStorage.setItem(THEME, t); } catch (e) {} this.setState({ theme: t }); },
+      knobLeft: isDark ? '22px' : '3px',
+      tableRows, tableEmpty: per && tableRows.length === 0,
+      detail, chart: sel ? this.chart(sel.list) : { points: '', dots: [], first: '', last: '' },
+      modeDay: () => this.setState({ mode: 'day' }), modeBasho: () => this.setState({ mode: 'basho' }),
+      dayBg: mode === 'day' ? c.ink : 'transparent', dayFg: mode === 'day' ? c.bg : c.ink,
+      bashoBg: mode === 'basho' ? c.ink : 'transparent', bashoFg: mode === 'basho' ? c.bg : c.ink,
+    };
+  }
+}
+</script>
+</body>
+</html>
