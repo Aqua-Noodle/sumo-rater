@@ -9,8 +9,9 @@ enum class Screen { START, RATE, MENU, TABLE, DETAIL }
 data class UiState(
     val screen: Screen = Screen.START,
     val idx: Int = 0,
-    val w: Int? = null,
-    val l: Int? = null,
+    val east: Int? = null,
+    val west: Int? = null,
+    val note: String = "",
     val ratings: Map<String, Rating> = emptyMap(),
     val bouts: List<Bout> = emptyList(),
     val bashoId: String = "",

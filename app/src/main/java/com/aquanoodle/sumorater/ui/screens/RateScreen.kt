@@ -5,10 +5,12 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,19 +18,27 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
@@ -50,6 +61,7 @@ import com.aquanoodle.sumorater.ui.components.WheelPicker
 import com.aquanoodle.sumorater.ui.theme.Archivo
 import com.aquanoodle.sumorater.ui.theme.LocalSumoColors
 import com.aquanoodle.sumorater.ui.theme.TabularNums
+import com.aquanoodle.sumorater.ui.wheelIndexOf
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -61,8 +73,13 @@ private const val ENTER_OFFSET_DP = 90f
 // centered within it) and the photo size below, so the photo, the dash, and
 // the wheels' selected numbers all line up on the same horizontal line.
 private const val WHEEL_VIEWPORT_DP = 192
+private const val WHEEL_WIDTH_DP = 60
+private const val DASH_WIDTH_DP = 18
+private const val GAP_DP = 8
 private const val PHOTO_HEIGHT_DP = 118
 private const val PHOTO_TOP_OFFSET_DP = (WHEEL_VIEWPORT_DP - PHOTO_HEIGHT_DP) / 2
+
+private val WHEEL_ITEMS = (10 downTo 0).map { it.toString() } + ""
 
 @Composable
 fun RateScreen(
@@ -71,21 +88,27 @@ fun RateScreen(
     day: Int,
     bashoLabel: String,
     loading: Boolean,
-    w: Int?,
-    l: Int?,
+    east: Int?,
+    west: Int?,
+    note: String,
+    ratedToday: Int,
     photos: Map<Int, String>,
     onOpenMenu: () -> Unit,
-    onWinnerSettled: (Int) -> Unit,
-    onLoserSettled: (Int) -> Unit,
+    onOpenTable: () -> Unit,
+    onEastSettled: (Int) -> Unit,
+    onWestSettled: (Int) -> Unit,
+    onNoteChange: (String) -> Unit,
     onNext: () -> Unit,
     onBack: () -> Unit,
+    onRestartDay: () -> Unit,
     onPhotoTap: (Int) -> Unit,
 ) {
     val colors = LocalSumoColors.current
     val bout = bouts.getOrNull(idx)
     val isDone = bouts.isNotEmpty() && bout == null
     val isEmpty = bouts.isEmpty()
-    val canBack = idx > 0 && bout != null
+    // Back stays available on the "day done" screen, so a finished day can be reopened.
+    val canBack = idx > 0 && bouts.isNotEmpty()
 
     val progressLabel = if (bout != null) {
         "${bout.div} · Day $day · ${idx + 1} / ${bouts.size}".uppercase()
@@ -97,29 +120,45 @@ fun RateScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.bg)
-            .windowInsetsPadding(WindowInsets.systemBars),
+            .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.ime)),
     ) {
         TopBar(progressLabel = progressLabel, onOpenMenu = onOpenMenu)
 
-        Box(modifier = Modifier.weight(1f)) {
-            when {
-                bout != null -> BoutCard(
-                    bout = bout,
-                    w = w,
-                    l = l,
-                    photos = photos,
-                    canSwipeRight = canBack,
-                    onWinnerSettled = onWinnerSettled,
-                    onLoserSettled = onLoserSettled,
-                    onSwipeLeft = onNext,
-                    onSwipeRight = onBack,
-                    onPhotoTap = onPhotoTap,
-                )
-                isDone -> DoneState(bashoLabel = bashoLabel, day = day, ratedCount = bouts.size)
-                isEmpty -> EmptyState(
-                    message = if (loading) "Loading…" else "No bout data available for $bashoLabel, day $day.",
-                    onPickAnotherDay = onOpenMenu,
-                )
+        BoxWithConstraints(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                when {
+                    bout != null -> BoutCard(
+                        bout = bout,
+                        east = east,
+                        west = west,
+                        note = note,
+                        photos = photos,
+                        canSwipeRight = canBack,
+                        onEastSettled = onEastSettled,
+                        onWestSettled = onWestSettled,
+                        onNoteChange = onNoteChange,
+                        onSwipeLeft = onNext,
+                        onSwipeRight = onBack,
+                        onPhotoTap = onPhotoTap,
+                    )
+                    isDone -> DoneState(
+                        bashoLabel = bashoLabel,
+                        day = day,
+                        ratedCount = ratedToday,
+                        onOpenTable = onOpenTable,
+                        onRestartDay = onRestartDay,
+                    )
+                    isEmpty -> EmptyState(
+                        message = if (loading) "Loading…" else "No bout data available for $bashoLabel, day $day.",
+                        onPickAnotherDay = onOpenMenu,
+                    )
+                }
             }
         }
 
@@ -203,14 +242,19 @@ private fun HamburgerButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun DoneState(bashoLabel: String, day: Int, ratedCount: Int) {
+private fun DoneState(
+    bashoLabel: String,
+    day: Int,
+    ratedCount: Int,
+    onOpenTable: () -> Unit,
+    onRestartDay: () -> Unit,
+) {
     val colors = LocalSumoColors.current
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
     ) {
         Text(
             text = "$bashoLabel · Day $day done",
@@ -223,6 +267,16 @@ private fun DoneState(bashoLabel: String, day: Int, ratedCount: Int) {
             textAlign = TextAlign.Center,
             style = TextStyle(fontFamily = Archivo, fontSize = 14.sp, color = colors.mute),
         )
+        Spacer(modifier = Modifier.height(24.dp))
+        OutlinedButton(
+            onClick = onOpenTable,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.ink),
+        ) {
+            Text("View my ratings", style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 14.sp))
+        }
+        TextButton(onClick = onRestartDay) {
+            Text("Back to first bout", style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.faint))
+        }
     }
 }
 
@@ -231,10 +285,9 @@ private fun EmptyState(message: String, onPickAnotherDay: () -> Unit) {
     val colors = LocalSumoColors.current
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
     ) {
         Text(
             text = message,
@@ -256,16 +309,19 @@ private enum class SwipePhase { IDLE, DRAGGING }
 @Composable
 private fun BoutCard(
     bout: Bout,
-    w: Int?,
-    l: Int?,
+    east: Int?,
+    west: Int?,
+    note: String,
     photos: Map<Int, String>,
     canSwipeRight: Boolean,
-    onWinnerSettled: (Int) -> Unit,
-    onLoserSettled: (Int) -> Unit,
+    onEastSettled: (Int) -> Unit,
+    onWestSettled: (Int) -> Unit,
+    onNoteChange: (String) -> Unit,
     onSwipeLeft: () -> Unit,
     onSwipeRight: () -> Unit,
     onPhotoTap: (Int) -> Unit,
 ) {
+    val colors = LocalSumoColors.current
     val scope = rememberCoroutineScope()
     val animOffsetDp = remember { Animatable(0f) }
     val alpha = remember { Animatable(1f) }
@@ -294,99 +350,163 @@ private fun BoutCard(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(start = 12.dp, end = 12.dp, bottom = 40.dp)
-            .pointerInput(canSwipeRight) {
-                detectHorizontalDragGestures(
-                    onDragStart = {
-                        phase = SwipePhase.DRAGGING
-                        dragOffsetDp = animOffsetDp.value
-                    },
-                    onDragEnd = {
-                        val d = dragOffsetDp
-                        phase = SwipePhase.IDLE
-                        if (abs(d) > SWIPE_THRESHOLD_DP && (d < 0 || canSwipeRight)) {
-                            flyOutThenAdvance(d, if (d < 0) -1 else 1)
-                        } else {
-                            settleBack(d)
-                        }
-                    },
-                    onDragCancel = {
-                        val d = dragOffsetDp
-                        phase = SwipePhase.IDLE
-                        settleBack(d)
-                    },
-                ) { change, dragAmount ->
-                    change.consume()
-                    dragOffsetDp += dragAmount / density
-                }
-            },
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Row(
+    // The whole card moves with the swipe; only the wrestler row (not the notes box) starts one.
+    val cardTransform = Modifier.graphicsLayer {
+        val dp = if (phase == SwipePhase.DRAGGING) dragOffsetDp else animOffsetDp.value
+        translationX = dp * density
+        rotationZ = dp / 40f
+        this.alpha = alpha.value
+    }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp)) {
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .graphicsLayer {
-                    val dp = if (phase == SwipePhase.DRAGGING) dragOffsetDp else animOffsetDp.value
-                    translationX = dp * density
-                    rotationZ = dp / 40f
-                    this.alpha = alpha.value
+                .pointerInput(canSwipeRight) {
+                    detectHorizontalDragGestures(
+                        onDragStart = {
+                            phase = SwipePhase.DRAGGING
+                            dragOffsetDp = animOffsetDp.value
+                        },
+                        onDragEnd = {
+                            val d = dragOffsetDp
+                            phase = SwipePhase.IDLE
+                            if (abs(d) > SWIPE_THRESHOLD_DP && (d < 0 || canSwipeRight)) {
+                                flyOutThenAdvance(d, if (d < 0) -1 else 1)
+                            } else {
+                                settleBack(d)
+                            }
+                        },
+                        onDragCancel = {
+                            val d = dragOffsetDp
+                            phase = SwipePhase.IDLE
+                            settleBack(d)
+                        },
+                    ) { change, dragAmount ->
+                        change.consume()
+                        dragOffsetDp += dragAmount / density
+                    }
                 },
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-            // Top-aligned: the wheel's selected row always sits at its own vertical
-            // center (WHEEL_VIEWPORT_DP / 2), so every sibling is pinned to line up
-            // with that same height explicitly, instead of relying on Row's default
-            // centering (which would center the *whole* photo+name+rank column, not
-            // just the photo, and drift out of line with the wheel).
-            verticalAlignment = Alignment.Top,
         ) {
-            RikishiColumn(name = bout.winnerName, rank = bout.winnerRank, photoPath = photos[bout.winnerId], onPhotoTap = { onPhotoTap(bout.winnerId) })
-
-            val winnerItems = remember { (10 downTo 1).map { it.toString() } + "" }
-            val winnerTarget = if (w == null) 10 else 10 - w
-            WheelPicker(
-                items = winnerItems,
-                targetIndex = winnerTarget,
-                onSettledIndexChange = onWinnerSettled,
-            )
-
-            Box(
-                modifier = Modifier
-                    .width(18.dp)
-                    .height(WHEEL_VIEWPORT_DP.dp),
-                contentAlignment = Alignment.Center,
+            Row(
+                modifier = Modifier.fillMaxWidth().then(cardTransform),
+                horizontalArrangement = Arrangement.spacedBy(GAP_DP.dp, Alignment.CenterHorizontally),
+                // Top-aligned: the wheel's selected row always sits at its own vertical
+                // center (WHEEL_VIEWPORT_DP / 2), so every sibling is pinned to line up
+                // with that same height explicitly.
+                verticalAlignment = Alignment.Top,
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(3.dp)
-                        .background(LocalSumoColors.current.ink),
-                )
+                RikishiColumn(name = bout.eastName, rank = bout.eastRank, photoPath = photos[bout.eastId], onPhotoTap = { onPhotoTap(bout.eastId) })
+
+                val reason = bout.unratableReason
+                if (reason == null) {
+                    // Keyed per bout so a wheel still settling can't write into the next bout.
+                    key(bout.key) {
+                        WheelPicker(items = WHEEL_ITEMS, targetIndex = wheelIndexOf(east), onSettledIndexChange = onEastSettled)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .width(DASH_WIDTH_DP.dp)
+                            .height(WHEEL_VIEWPORT_DP.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(3.dp)
+                                .background(colors.ink),
+                        )
+                    }
+                    key(bout.key) {
+                        WheelPicker(items = WHEEL_ITEMS, targetIndex = wheelIndexOf(west), onSettledIndexChange = onWestSettled)
+                    }
+                } else {
+                    UnratableMiddle(reason)
+                }
+
+                RikishiColumn(name = bout.westName, rank = bout.westRank, photoPath = photos[bout.westId], onPhotoTap = { onPhotoTap(bout.westId) })
             }
-
-            val loserMax = w ?: 11
-            val loserItems = remember(loserMax) { ((loserMax - 1) downTo 0).map { it.toString() } + "" }
-            val loserTarget = if (l == null) loserMax else loserMax - 1 - l
-            WheelPicker(
-                items = loserItems,
-                targetIndex = loserTarget,
-                onSettledIndexChange = onLoserSettled,
-            )
-
-            RikishiColumn(name = bout.loserName, rank = bout.loserRank, photoPath = photos[bout.loserId], onPhotoTap = { onPhotoTap(bout.loserId) })
         }
 
+        if (bout.ratable) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .then(cardTransform),
+                horizontalArrangement = Arrangement.spacedBy(66.dp, Alignment.CenterHorizontally),
+            ) {
+                val faintCaption = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.18f.em, color = colors.faint)
+                Text("EAST", style = faintCaption)
+                Text("WEST", style = faintCaption)
+            }
+
+            key(bout.key) {
+                NotesSection(note = note, onNoteChange = onNoteChange, modifier = Modifier.then(cardTransform))
+            }
+        }
+    }
+}
+
+@Composable
+private fun UnratableMiddle(reason: String) {
+    val colors = LocalSumoColors.current
+    Box(
+        modifier = Modifier
+            .width((WHEEL_WIDTH_DP * 2 + DASH_WIDTH_DP + GAP_DP * 2).dp)
+            .height(WHEEL_VIEWPORT_DP.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(reason, textAlign = TextAlign.Center, style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = colors.mute))
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "NOT RATED",
+                style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.18f.em, color = colors.faint),
+            )
+        }
+    }
+}
+
+/** Collapsed by default; opens automatically when the bout already has a note. */
+@Composable
+private fun NotesSection(note: String, onNoteChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    val colors = LocalSumoColors.current
+    var expanded by remember { mutableStateOf(note.isNotBlank()) }
+    Column(modifier = modifier.fillMaxWidth().padding(top = 20.dp, start = 12.dp, end = 12.dp)) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(66.dp, Alignment.CenterHorizontally),
+                .align(Alignment.CenterHorizontally)
+                .sizeIn(minHeight = 40.dp)
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            val faintCaption = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.18f.em, color = LocalSumoColors.current.faint)
-            Text("WIN", style = faintCaption)
-            Text("LOSS", style = faintCaption)
+            val label = if (!expanded && note.isNotBlank()) "NOTES ·" else "NOTES"
+            Text(label, style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.18f.em, color = colors.faint))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(if (expanded) "▴" else "▾", style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = colors.faint))
+        }
+        if (expanded) {
+            BasicTextField(
+                value = note,
+                onValueChange = onNoteChange,
+                textStyle = TextStyle(fontFamily = Archivo, fontSize = 14.sp, lineHeight = 20.sp, color = colors.ink),
+                cursorBrush = SolidColor(colors.ink),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, colors.line)
+                    .padding(12.dp)
+                    .heightIn(min = 60.dp),
+                decorationBox = { inner ->
+                    Box {
+                        if (note.isEmpty()) {
+                            Text("Add a note…", style = TextStyle(fontFamily = Archivo, fontSize = 14.sp, color = colors.faint))
+                        }
+                        inner()
+                    }
+                },
+            )
         }
     }
 }

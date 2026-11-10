@@ -13,14 +13,35 @@ android {
         applicationId = "com.aquanoodle.sumorater"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // Increases with every CI build so each APK installs as an update over the last.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionName = "1.1.$versionCode"
+    }
+
+    // One fixed key for every build. Android only lets an APK update an installed
+    // app (keeping its data) when both are signed with the same key; without it,
+    // each CI machine signs with its own throwaway debug key.
+    val sharedKeystore = rootProject.file("keystore/sumo-rater.jks")
+    val signingPassword = System.getenv("SIGNING_PASSWORD") ?: "sumorater"
+    signingConfigs {
+        if (sharedKeystore.exists()) {
+            create("shared") {
+                storeFile = sharedKeystore
+                storePassword = signingPassword
+                keyAlias = "sumorater"
+                keyPassword = signingPassword
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            if (sharedKeystore.exists()) signingConfig = signingConfigs.getByName("shared")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (sharedKeystore.exists()) signingConfig = signingConfigs.getByName("shared")
         }
     }
 

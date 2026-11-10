@@ -11,3 +11,6 @@ local.properties
 /app/build
 /app/release
 *.hprof
+
+# Signing keys are restored from a GitHub secret at build time, never committed
+keystore/*.jks

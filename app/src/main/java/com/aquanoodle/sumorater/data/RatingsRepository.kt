@@ -62,14 +62,19 @@ class RatingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.WHERE] = json.encodeToString(where) }
     }
 
-    suspend fun loadDayCache(cacheKey: String): Map<String, List<RawBoutRow>>? {
-        val key = stringPreferencesKey("sumo-rater.cache.$cacheKey")
-        val raw = context.dataStore.data.first()[key] ?: return null
-        return runCatching { json.decodeFromString<Map<String, List<RawBoutRow>>>(raw) }.getOrNull()
+    /** Cached torikumi for a basho-day; falls back to the pre-1.1 winner-first cache if that's all we have. */
+    suspend fun loadDayCache(cacheKey: String): Map<String, List<TorikumiRow>>? {
+        val prefs = context.dataStore.data.first()
+        prefs[stringPreferencesKey("sumo-rater.cache2.$cacheKey")]?.let { raw ->
+            runCatching { json.decodeFromString<Map<String, List<TorikumiRow>>>(raw) }.getOrNull()?.let { return it }
+        }
+        val legacy = prefs[stringPreferencesKey("sumo-rater.cache.$cacheKey")] ?: return null
+        return runCatching { json.decodeFromString<Map<String, List<RawBoutRow>>>(legacy) }.getOrNull()
+            ?.mapValues { (_, rows) -> rows.map { it.toTorikumiRow() } }
     }
 
-    suspend fun saveDayCache(cacheKey: String, src: Map<String, List<RawBoutRow>>) {
-        val key = stringPreferencesKey("sumo-rater.cache.$cacheKey")
+    suspend fun saveDayCache(cacheKey: String, src: Map<String, List<TorikumiRow>>) {
+        val key = stringPreferencesKey("sumo-rater.cache2.$cacheKey")
         context.dataStore.edit { it[key] = json.encodeToString(src) }
     }
 

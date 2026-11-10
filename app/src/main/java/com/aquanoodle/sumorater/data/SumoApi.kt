@@ -12,7 +12,7 @@ import java.net.URL
  */
 object SumoApi {
 
-    suspend fun fetchTorikumi(bashoId: String, division: String, day: Int): List<RawBoutRow>? =
+    suspend fun fetchTorikumi(bashoId: String, division: String, day: Int): List<TorikumiRow>? =
         withContext(Dispatchers.IO) {
             try {
                 val url = URL("https://www.sumo-api.com/api/basho/$bashoId/torikumi/$division/$day")
@@ -32,28 +32,29 @@ object SumoApi {
             }
         }
 
-    private fun parseTorikumi(body: String): List<RawBoutRow> {
+    /** Every bout of the day in official order, east/west as listed; unfought and fusen bouts included. */
+    private fun parseTorikumi(body: String): List<TorikumiRow> {
         val root = JSONObject(body)
         val arr = root.optJSONArray("torikumi") ?: return emptyList()
-        val out = mutableListOf<RawBoutRow>()
+        val out = mutableListOf<Pair<Int, TorikumiRow>>()
         for (i in 0 until arr.length()) {
             val m = arr.getJSONObject(i)
-            val winnerId = if (m.has("winnerId") && !m.isNull("winnerId")) m.optInt("winnerId", -1) else -1
-            if (winnerId <= 0) continue // not yet fought
-            val eastId = m.optInt("eastId")
-            val westId = m.optInt("westId")
-            val eastShikona = m.optString("eastShikona")
-            val westShikona = m.optString("westShikona")
-            val eastRank = m.optString("eastRank")
-            val westRank = m.optString("westRank")
+            val winnerId = if (m.isNull("winnerId")) 0 else m.optInt("winnerId", 0)
+            val kimarite = if (m.isNull("kimarite")) "" else m.optString("kimarite")
+            val order = m.optInt("matchNo", 0).takeIf { it > 0 } ?: (i + 1)
             out.add(
-                if (winnerId == eastId) {
-                    RawBoutRow(eastId, eastShikona, eastRank, westId, westShikona, westRank)
-                } else {
-                    RawBoutRow(westId, westShikona, westRank, eastId, eastShikona, eastRank)
-                }
+                order to TorikumiRow(
+                    eastId = m.optInt("eastId"),
+                    eastName = m.optString("eastShikona"),
+                    eastRank = m.optString("eastRank"),
+                    westId = m.optInt("westId"),
+                    westName = m.optString("westShikona"),
+                    westRank = m.optString("westRank"),
+                    winnerId = winnerId,
+                    kimarite = kimarite,
+                )
             )
         }
-        return out
+        return out.sortedBy { it.first }.map { it.second }
     }
 }

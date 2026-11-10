@@ -13,15 +13,25 @@ import com.aquanoodle.sumorater.data.ChartMode
 import com.aquanoodle.sumorater.data.RatingsRepository
 import com.aquanoodle.sumorater.data.Rating
 import com.aquanoodle.sumorater.data.RikishiAggregate
+import com.aquanoodle.sumorater.data.RikishiEntry
 import com.aquanoodle.sumorater.data.SAMPLE
 import com.aquanoodle.sumorater.data.SumoApi
 import com.aquanoodle.sumorater.data.WhereState
 import com.aquanoodle.sumorater.data.buildChart
 import com.aquanoodle.sumorater.data.currentBashoDay
 import com.aquanoodle.sumorater.data.perRikishi
+import com.aquanoodle.sumorater.data.ratingKey
 import com.aquanoodle.sumorater.data.toBouts
+import com.aquanoodle.sumorater.data.toTorikumiRow
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+
+/** Wheel rows top→bottom: 10, 9 … 0, then one blank row (= not rated). */
+const val WHEEL_BLANK_INDEX = 11
+
+fun wheelValueAt(index: Int): Int? = if (index >= WHEEL_BLANK_INDEX) null else (10 - index).coerceIn(0, 10)
+
+fun wheelIndexOf(value: Int?): Int = if (value == null) WHEEL_BLANK_INDEX else 10 - value
 
 class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
 
@@ -36,7 +46,11 @@ class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
 
     init {
         viewModelScope.launch {
-            val ratings = repo.loadRatings()
+            val stored = repo.loadRatings()
+            // Ratings used to be keyed by list position; re-key by the two wrestlers
+            // so they stay attached to the right bout now that the list changed.
+            val ratings = stored.values.associateBy { ratingKey(it) }
+            if (ratings.keys != stored.keys) repo.saveRatings(ratings)
             pos = repo.loadPos().toMutableMap()
             val theme = repo.loadTheme()
             val where = repo.loadWhere() ?: currentBashoDay().let { WhereState(it.bashoId, it.day) }
@@ -65,7 +79,8 @@ class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
 
     private fun cacheKey(bashoId: String = state.bashoId, day: Int = state.day) = "$bashoId-$day"
 
-    fun loadDay() {
+    /** Loads the day's torikumi. With [jumpKey], opens that bout instead of the resume position. */
+    fun loadDay(jumpKey: String? = null) {
         val bashoId = state.bashoId
         val day = state.day
         val key = cacheKey(bashoId, day)
@@ -84,12 +99,13 @@ class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
                 repo.saveDayCache(key, fetched)
                 fetched
             } else {
-                repo.loadDayCache(key) ?: SAMPLE[key]
+                repo.loadDayCache(key) ?: SAMPLE[key]?.mapValues { (_, rows) -> rows.map { it.toTorikumiRow() } }
             }
             if (myToken != loadToken) return@launch
 
             val bouts = src?.let { toBouts(bashoId, day, it) } ?: emptyList()
-            val idx = pos[key] ?: 0
+            val jumped = jumpKey?.let { k -> bouts.indexOfFirst { it.key == k }.takeIf { it >= 0 } }
+            val idx = (jumped ?: pos[key] ?: 0).coerceIn(0, bouts.size)
             state = state.copy(bouts = bouts, idx = idx, loading = false)
             loadBout()
         }
@@ -99,62 +115,86 @@ class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
         val bout = currentBout()
         if (bout == null || state.screen != Screen.RATE) return
         val saved = state.ratings[bout.key]
-        state = state.copy(w = saved?.w, l = saved?.l)
+        val eastIsWinner = saved?.winnerId == bout.eastId
+        state = state.copy(
+            east = saved?.let { if (eastIsWinner) it.w else it.l },
+            west = saved?.let { if (eastIsWinner) it.l else it.w },
+            note = saved?.note.orEmpty(),
+        )
     }
 
-    /** Called when the winner wheel settles on row [index] (0..10, 10 = blank). */
-    fun onWinnerSettled(index: Int) {
-        val w = if (index >= 10) null else maxOf(1, 10 - index)
-        if (w == state.w) return
-        var l = state.l
-        if (w != null && l != null && l >= w) l = w - 1
-        state = state.copy(w = w, l = l)
+    fun onEastSettled(index: Int) {
+        val v = wheelValueAt(index)
+        if (v != state.east) state = state.copy(east = v)
     }
 
-    /** Called when the loser wheel settles on row [index] (0..max, max = blank). */
-    fun onLoserSettled(index: Int) {
-        val max = state.w ?: 11
-        val l = if (index >= max) null else maxOf(0, minOf(max - 1, max - 1 - index))
-        if (l != state.l) state = state.copy(l = l)
+    fun onWestSettled(index: Int) {
+        val v = wheelValueAt(index)
+        if (v != state.west) state = state.copy(west = v)
     }
 
-    /** Saves the current bout's rating and (by default) advances to the next one. */
-    fun save(advance: Boolean = true) {
+    fun onNoteChange(text: String) {
+        state = state.copy(note = text)
+    }
+
+    /** Saves the current bout (if it can be rated) and advances to the next one. */
+    fun save() {
         val bout = currentBout() ?: return
         val ratings = state.ratings.toMutableMap()
-        if (state.w == null && state.l == null) {
-            ratings.remove(bout.key)
-        } else {
-            ratings[bout.key] = Rating(
-                bashoId = bout.bashoId,
-                day = bout.day,
-                div = bout.div,
-                winnerId = bout.winnerId,
-                winnerName = bout.winnerName,
-                winnerRank = bout.winnerRank,
-                loserId = bout.loserId,
-                loserName = bout.loserName,
-                loserRank = bout.loserRank,
-                w = state.w,
-                l = state.l,
-                ts = System.currentTimeMillis(),
-            )
+        if (bout.ratable) {
+            val note = state.note.trim().ifEmpty { null }
+            if (state.east == null && state.west == null && note == null) {
+                ratings.remove(bout.key)
+            } else {
+                val eastWon = bout.winnerId == bout.eastId
+                val updated = Rating(
+                    bashoId = bout.bashoId,
+                    day = bout.day,
+                    div = bout.div,
+                    winnerId = bout.winnerId,
+                    winnerName = if (eastWon) bout.eastName else bout.westName,
+                    winnerRank = if (eastWon) bout.eastRank else bout.westRank,
+                    loserId = if (eastWon) bout.westId else bout.eastId,
+                    loserName = if (eastWon) bout.westName else bout.eastName,
+                    loserRank = if (eastWon) bout.westRank else bout.eastRank,
+                    w = if (eastWon) state.east else state.west,
+                    l = if (eastWon) state.west else state.east,
+                    ts = System.currentTimeMillis(),
+                    note = note,
+                )
+                val existing = ratings[bout.key]
+                // Paging past an unchanged bout shouldn't bump its timestamp.
+                if (existing == null || existing.copy(ts = 0) != updated.copy(ts = 0)) ratings[bout.key] = updated
+            }
         }
-        val nextIdx = minOf(state.bouts.size, state.idx + if (advance) 1 else 0)
+        val nextIdx = minOf(state.bouts.size, state.idx + 1)
         pos[cacheKey()] = nextIdx
         val posSnapshot = pos.toMap()
+        val changed = ratings != state.ratings
         viewModelScope.launch {
-            repo.saveRatings(ratings)
+            if (changed) repo.saveRatings(ratings)
             repo.savePos(posSnapshot)
         }
         state = state.copy(ratings = ratings, idx = nextIdx)
         loadBout()
     }
 
+    /** Previous bout; from the "day done" screen this reopens the last bout. */
     fun back() {
         if (state.idx <= 0) return
         state = state.copy(idx = state.idx - 1)
         loadBout()
+    }
+
+    fun jumpTo(index: Int) {
+        state = state.copy(idx = index.coerceIn(0, state.bouts.size))
+        loadBout()
+    }
+
+    /** Opens the bout behind a saved rating so it can be changed. */
+    fun editBout(entry: RikishiEntry) {
+        state = state.copy(bashoId = entry.bashoId, day = entry.day, screen = Screen.RATE, bouts = emptyList(), idx = 0)
+        loadDay(jumpKey = entry.key)
     }
 
     fun openMenu() {

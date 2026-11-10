@@ -42,6 +42,7 @@ fun TableScreen(
     photos: Map<Int, String>,
     onBack: () -> Unit,
     onOpenDetail: (Int) -> Unit,
+    onExportCsv: () -> Unit,
 ) {
     val colors = LocalSumoColors.current
     Column(
@@ -59,11 +60,10 @@ fun TableScreen(
             }
             Text(
                 "My ratings".uppercase(),
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f).padding(start = 12.dp),
                 style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, letterSpacing = 0.14f.em, color = colors.mute),
             )
-            androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(48.dp))
+            if (rows.isNotEmpty()) ExportCsvButton(onClick = onExportCsv)
         }
 
         if (rows.isEmpty()) {

@@ -57,8 +57,9 @@ fun WheelPicker(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalSumoColors.current
-    val listState = rememberLazyListState()
-    var lastKnownIndex by remember { mutableStateOf(-1) }
+    val initialIndex = targetIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+    var lastKnownIndex by remember { mutableStateOf(initialIndex) }
 
     LaunchedEffect(targetIndex, items) {
         if (targetIndex in items.indices && targetIndex != lastKnownIndex) {

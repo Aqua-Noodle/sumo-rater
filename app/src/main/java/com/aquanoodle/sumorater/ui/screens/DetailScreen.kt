@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -58,6 +60,8 @@ fun DetailScreen(
     onBack: () -> Unit,
     onModeChange: (ChartMode) -> Unit,
     onPhotoTap: () -> Unit,
+    onEditEntry: (RikishiEntry) -> Unit,
+    onExportCsv: () -> Unit,
 ) {
     val colors = LocalSumoColors.current
     Column(
@@ -73,6 +77,8 @@ fun DetailScreen(
             IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                 Text("←", fontSize = 20.sp, color = colors.ink)
             }
+            Spacer(modifier = Modifier.weight(1f))
+            ExportCsvButton(onClick = onExportCsv)
         }
 
         LazyColumn(modifier = Modifier.weight(1f)) {
@@ -132,8 +138,16 @@ fun DetailScreen(
                 }
             }
 
-            items(rikishi.list.reversed()) { entry ->
-                RatingRow(entry)
+            item {
+                Text(
+                    "Tap a bout to change its rating or note.",
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+                    style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, color = colors.faint),
+                )
+            }
+
+            items(rikishi.list.reversed(), key = { it.key }) { entry ->
+                RatingRow(entry, onClick = { onEditEntry(entry) })
             }
         }
     }
@@ -161,7 +175,21 @@ private fun ModeButton(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RatingRow(entry: RikishiEntry) {
+fun ExportCsvButton(onClick: () -> Unit) {
+    val colors = LocalSumoColors.current
+    Text(
+        "EXPORT CSV",
+        modifier = Modifier
+            .sizeIn(minHeight = 48.dp)
+            .clickable(onClick = onClick)
+            .wrapContentSize(Alignment.Center)
+            .padding(horizontal = 12.dp),
+        style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 11.sp, letterSpacing = 0.14f.em, color = colors.ink),
+    )
+}
+
+@Composable
+private fun RatingRow(entry: RikishiEntry, onClick: () -> Unit) {
     val colors = LocalSumoColors.current
     val bg = if (entry.won) WinRowBg else LossRowBg
     val fg = if (entry.won) WinRowFg else LossRowFg
@@ -172,6 +200,7 @@ private fun RatingRow(entry: RikishiEntry) {
             .drawBehind {
                 drawLine(colors.line, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx())
             }
+            .clickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -183,6 +212,13 @@ private fun RatingRow(entry: RikishiEntry) {
                 "${bashoLabel(entry.bashoId)} · Day ${entry.day}",
                 style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, letterSpacing = 0.04f.em, color = fg.copy(alpha = 0.7f)),
             )
+            if (!entry.note.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    entry.note,
+                    style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, lineHeight = 16.sp, color = fg.copy(alpha = 0.85f)),
+                )
+            }
         }
         Text(
             (if (entry.won) "win" else "loss").uppercase(),

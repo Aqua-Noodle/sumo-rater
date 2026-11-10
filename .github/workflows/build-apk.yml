@@ -31,8 +31,30 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Restore signing key from secret
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$SIGNING_KEYSTORE_B64" ]; then
+            mkdir -p keystore
+            echo "$SIGNING_KEYSTORE_B64" | base64 -d > keystore/sumo-rater.jks
+            echo "Signing key restored from secret."
+          fi
+
       - name: Build debug APK
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Verify APK is signed with the shared key
+        run: |
+          if [ ! -f keystore/sumo-rater.jks ]; then
+            echo "::warning::No shared signing key; this APK will NOT install as an update over a previous build."
+            exit 0
+          fi
+          EXPECTED=8db0c5bfe17fde1350b9b5d029e7a368f386f6b13efa5d3dba68c8a2576a5aa7
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | tee signer.txt
+          grep -qi "SHA-256 digest: $EXPECTED" signer.txt || { echo "::error::APK not signed with keystore/sumo-rater.jks; it would not install as an update"; exit 1; }
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

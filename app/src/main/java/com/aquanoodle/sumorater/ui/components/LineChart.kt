@@ -29,7 +29,9 @@ fun BoutLineChart(chart: ChartData, modifier: Modifier = Modifier) {
     ) {
         val scale = size.width / 340f
         fun px(v: Float) = v * scale
-        val labelStyle = TextStyle(fontFamily = Archivo, fontSize = (10 * scale).sp, color = colors.faint)
+        // 10 logical units, converted from pixels; passing (10 * scale).sp would apply
+        // screen density twice and blow the labels up ~3x on a phone.
+        val labelStyle = TextStyle(fontFamily = Archivo, fontSize = (10f * scale).toSp(), color = colors.faint)
 
         listOf(10f, 70f, 130f).forEach { gy ->
             drawLine(
@@ -40,7 +42,8 @@ fun BoutLineChart(chart: ChartData, modifier: Modifier = Modifier) {
             )
         }
         listOf(10f to "10", 70f to "5", 130f to "0").forEach { (gy, label) ->
-            drawText(textMeasurer, label, topLeft = Offset(0f, px(gy) - px(10f)), style = labelStyle)
+            val measured = textMeasurer.measure(label, labelStyle)
+            drawText(measured, topLeft = Offset(0f, px(gy) - measured.size.height / 2f))
         }
 
         if (chart.points.size >= 2) {
@@ -68,16 +71,12 @@ fun BoutLineChart(chart: ChartData, modifier: Modifier = Modifier) {
         }
 
         if (chart.first.isNotEmpty()) {
-            drawText(textMeasurer, chart.first, topLeft = Offset(px(24f), px(148f) - px(10f)), style = labelStyle)
+            val measured = textMeasurer.measure(chart.first, labelStyle)
+            drawText(measured, topLeft = Offset(px(24f), size.height - measured.size.height))
         }
         if (chart.last.isNotEmpty()) {
             val measured = textMeasurer.measure(chart.last, labelStyle)
-            drawText(
-                textMeasurer,
-                chart.last,
-                topLeft = Offset(px(340f) - measured.size.width, px(148f) - px(10f)),
-                style = labelStyle,
-            )
+            drawText(measured, topLeft = Offset(size.width - measured.size.width, size.height - measured.size.height))
         }
     }
 }

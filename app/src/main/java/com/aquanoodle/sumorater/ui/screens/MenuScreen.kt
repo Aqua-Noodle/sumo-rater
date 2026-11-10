@@ -48,6 +48,7 @@ fun MenuScreen(
     onPickBasho: (String) -> Unit,
     onPickDay: (Int) -> Unit,
     onToggleTheme: () -> Unit,
+    onExportCsv: () -> Unit,
 ) {
     val colors = LocalSumoColors.current
     Column(
@@ -98,6 +99,19 @@ fun MenuScreen(
             ) {
                 Text("Dark mode", style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = colors.ink))
                 ThemeSwitch(isDark = isDark)
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(BorderStroke(1.dp, colors.line))
+                    .clickable(onClick = onExportCsv)
+                    .padding(horizontal = 24.dp, vertical = 18.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Export all ratings", style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = colors.ink))
+                Text("CSV →", style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.faint))
             }
 
             Text(

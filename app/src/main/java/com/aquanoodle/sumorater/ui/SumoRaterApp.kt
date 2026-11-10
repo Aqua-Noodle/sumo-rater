@@ -20,9 +20,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.widget.Toast
+import com.aquanoodle.sumorater.data.allRatingsCsv
+import com.aquanoodle.sumorater.data.allRatingsFileName
 import com.aquanoodle.sumorater.data.bashoList
 import com.aquanoodle.sumorater.data.bashoLabel
 import com.aquanoodle.sumorater.data.copyPhotoToInternalStorage
+import com.aquanoodle.sumorater.data.rikishiCsv
+import com.aquanoodle.sumorater.data.rikishiFileName
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.aquanoodle.sumorater.ui.screens.DetailScreen
 import com.aquanoodle.sumorater.ui.screens.MenuScreen
 import com.aquanoodle.sumorater.ui.screens.RateScreen
@@ -53,6 +60,27 @@ fun SumoRaterApp() {
     val requestPhoto: (Int) -> Unit = { rikishiId ->
         pendingPhotoTarget = rikishiId
         pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
+
+    var pendingCsv by remember { mutableStateOf<String?>(null) }
+    val createCsv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        val csv = pendingCsv
+        pendingCsv = null
+        if (uri != null && csv != null) {
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) {
+                    runCatching {
+                        // BOM so Excel/Sheets read accented names and notes as UTF-8.
+                        context.contentResolver.openOutputStream(uri)?.use { it.write(("﻿" + csv).toByteArray()) } != null
+                    }.getOrDefault(false)
+                }
+                Toast.makeText(context, if (ok) "Ratings exported" else "Export failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    val exportCsv: (String, String) -> Unit = { fileName, csv ->
+        pendingCsv = csv
+        createCsv.launch(fileName)
     }
 
     (context as? ComponentActivity)?.let { activity ->
@@ -90,14 +118,19 @@ fun SumoRaterApp() {
                 day = state.day,
                 bashoLabel = bashoLabel(state.bashoId),
                 loading = state.loading,
-                w = state.w,
-                l = state.l,
+                east = state.east,
+                west = state.west,
+                note = state.note,
+                ratedToday = state.bouts.count { state.ratings[it.key]?.hasScore == true },
                 photos = state.photos,
                 onOpenMenu = viewModel::openMenu,
-                onWinnerSettled = viewModel::onWinnerSettled,
-                onLoserSettled = viewModel::onLoserSettled,
-                onNext = { viewModel.save(true) },
+                onOpenTable = viewModel::openTable,
+                onEastSettled = viewModel::onEastSettled,
+                onWestSettled = viewModel::onWestSettled,
+                onNoteChange = viewModel::onNoteChange,
+                onNext = viewModel::save,
                 onBack = viewModel::back,
+                onRestartDay = { viewModel.jumpTo(0) },
                 onPhotoTap = requestPhoto,
             )
 
@@ -112,6 +145,7 @@ fun SumoRaterApp() {
                 onPickBasho = viewModel::pickBasho,
                 onPickDay = viewModel::pickDay,
                 onToggleTheme = viewModel::toggleTheme,
+                onExportCsv = { exportCsv(allRatingsFileName(), allRatingsCsv(state.ratings)) },
             )
 
             Screen.TABLE -> TableScreen(
@@ -119,6 +153,7 @@ fun SumoRaterApp() {
                 photos = state.photos,
                 onBack = viewModel::openMenu,
                 onOpenDetail = viewModel::openDetail,
+                onExportCsv = { exportCsv(allRatingsFileName(), allRatingsCsv(state.ratings)) },
             )
 
             Screen.DETAIL -> {
@@ -132,6 +167,8 @@ fun SumoRaterApp() {
                         onBack = viewModel::openTable,
                         onModeChange = viewModel::setMode,
                         onPhotoTap = { requestPhoto(aggregate.id) },
+                        onEditEntry = viewModel::editBout,
+                        onExportCsv = { exportCsv(rikishiFileName(aggregate.name), rikishiCsv(aggregate)) },
                     )
                 } else {
                     androidx.compose.runtime.LaunchedEffect(state.selected) { viewModel.openTable() }

@@ -83,20 +83,42 @@ fun bashoList(now: BashoDay = currentBashoDay()): List<BashoOption> {
     return out
 }
 
-fun toBouts(bashoId: String, day: Int, src: Map<String, List<RawBoutRow>>): List<Bout> =
+/**
+ * Identifies a bout by its two wrestlers rather than its position in the day's
+ * list, so ratings survive changes to which bouts are listed (e.g. fusen and
+ * not-yet-fought bouts now appear in their official slots).
+ */
+fun boutKey(bashoId: String, day: Int, div: String, idA: Int, idB: Int): String =
+    "$bashoId-$day-$div-${minOf(idA, idB)}-${maxOf(idA, idB)}"
+
+fun ratingKey(r: Rating): String = boutKey(r.bashoId, r.day, r.div, r.winnerId, r.loserId)
+
+/** Old cache/sample rows only recorded winner vs loser; recover sides from the full rank text. */
+fun RawBoutRow.toTorikumiRow(): TorikumiRow {
+    val winnerIsWest = winnerRank.trim().endsWith("West", ignoreCase = true)
+    return if (winnerIsWest) {
+        TorikumiRow(loserId, loserName, loserRank, winnerId, winnerName, winnerRank, winnerId)
+    } else {
+        TorikumiRow(winnerId, winnerName, winnerRank, loserId, loserName, loserRank, winnerId)
+    }
+}
+
+fun toBouts(bashoId: String, day: Int, src: Map<String, List<TorikumiRow>>): List<Bout> =
     DIVS.flatMap { div ->
-        (src[div] ?: emptyList()).mapIndexed { i, b ->
+        (src[div] ?: emptyList()).map { b ->
             Bout(
-                key = "$bashoId-$day-$div-$i",
+                key = boutKey(bashoId, day, div, b.eastId, b.westId),
                 bashoId = bashoId,
                 day = day,
                 div = div,
+                eastId = b.eastId,
+                eastName = b.eastName,
+                eastRank = shortRank(b.eastRank),
+                westId = b.westId,
+                westName = b.westName,
+                westRank = shortRank(b.westRank),
                 winnerId = b.winnerId,
-                winnerName = b.winnerName,
-                winnerRank = shortRank(b.winnerRank),
-                loserId = b.loserId,
-                loserName = b.loserName,
-                loserRank = shortRank(b.loserRank),
+                kimarite = b.kimarite,
             )
         }
     }
