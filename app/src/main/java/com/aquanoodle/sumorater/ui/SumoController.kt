@@ -1,12 +1,8 @@
 package com.aquanoodle.sumorater.ui
 
-import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
 import com.aquanoodle.sumorater.data.Bout
 import com.aquanoodle.sumorater.data.ChartData
 import com.aquanoodle.sumorater.data.ChartMode
@@ -23,6 +19,9 @@ import com.aquanoodle.sumorater.data.perRikishi
 import com.aquanoodle.sumorater.data.ratingKey
 import com.aquanoodle.sumorater.data.toBouts
 import com.aquanoodle.sumorater.data.toTorikumiRow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
@@ -45,7 +44,13 @@ fun wheelValueAt(top: Int, index: Int): Int? = if (index > top) null else (top -
 
 fun wheelIndexOf(top: Int, value: Int?): Int = if (value == null) top + 1 else (top - value).coerceIn(0, top)
 
-class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
+/**
+ * App-wide rating state, owned by [com.aquanoodle.sumorater.SumoApplication] so the
+ * main screen and the floating bubble work on the same bout at the same time.
+ */
+class SumoController(private val repo: RatingsRepository) {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     var state by mutableStateOf(UiState())
         private set
@@ -57,7 +62,7 @@ class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
     private var loadToken = 0
 
     init {
-        viewModelScope.launch {
+        scope.launch {
             val stored = repo.loadRatings()
             // Ratings used to be keyed by list position; re-key by the two wrestlers
             // so they stay attached to the right bout now that the list changed.
@@ -96,10 +101,10 @@ class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
         val bashoId = state.bashoId
         val day = state.day
         val key = cacheKey(bashoId, day)
-        viewModelScope.launch { repo.saveWhere(WhereState(bashoId, day)) }
+        scope.launch { repo.saveWhere(WhereState(bashoId, day)) }
         val myToken = ++loadToken
         state = state.copy(loading = true, bouts = emptyList())
-        viewModelScope.launch {
+        scope.launch {
             val juryoDeferred = async { SumoApi.fetchTorikumi(bashoId, "Juryo", day) }
             val makuuchiDeferred = async { SumoApi.fetchTorikumi(bashoId, "Makuuchi", day) }
             val juryo = juryoDeferred.await()
@@ -125,7 +130,8 @@ class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
 
     fun loadBout() {
         val bout = currentBout()
-        if (bout == null || state.screen != Screen.RATE) return
+        // No screen check: the bubble keeps rating while the app shows another screen.
+        if (bout == null) return
         val saved = state.ratings[bout.key]
         val eastIsWinner = saved?.winnerId == bout.eastId
         state = state.copy(
@@ -193,7 +199,7 @@ class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
         pos[cacheKey()] = nextIdx
         val posSnapshot = pos.toMap()
         val changed = ratings != state.ratings
-        viewModelScope.launch {
+        scope.launch {
             if (changed) repo.saveRatings(ratings)
             repo.savePos(posSnapshot)
         }
@@ -247,7 +253,7 @@ class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
 
     fun toggleTheme() {
         val dark = !state.isDark
-        viewModelScope.launch { repo.saveTheme(if (dark) "dark" else "light") }
+        scope.launch { repo.saveTheme(if (dark) "dark" else "light") }
         state = state.copy(isDark = dark)
     }
 
@@ -256,7 +262,7 @@ class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
     }
 
     fun setPhoto(rikishiId: Int, path: String) {
-        viewModelScope.launch { repo.savePhoto(rikishiId, path) }
+        scope.launch { repo.savePhoto(rikishiId, path) }
         state = state.copy(photos = state.photos + (rikishiId to path))
     }
 
@@ -264,14 +270,4 @@ class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
 
     fun chartFor(selected: RikishiAggregate?): ChartData =
         if (selected == null) ChartData(emptyList(), emptyList(), "", "") else buildChart(selected.list, state.mode)
-
-    companion object {
-        fun factory(context: Context): ViewModelProvider.Factory =
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return SumoViewModel(RatingsRepository(context.applicationContext)) as T
-                }
-            }
-    }
 }

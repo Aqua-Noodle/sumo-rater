@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -47,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
@@ -102,6 +104,7 @@ fun RateScreen(
     onBack: () -> Unit,
     onRestartDay: () -> Unit,
     onPhotoTap: (Int) -> Unit,
+    onOpenBubble: () -> Unit,
 ) {
     val colors = LocalSumoColors.current
     val bout = bouts.getOrNull(idx)
@@ -122,7 +125,7 @@ fun RateScreen(
             .background(colors.bg)
             .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.ime)),
     ) {
-        TopBar(progressLabel = progressLabel, onOpenMenu = onOpenMenu)
+        TopBar(progressLabel = progressLabel, onOpenMenu = onOpenMenu, onOpenBubble = onOpenBubble)
 
         BoxWithConstraints(modifier = Modifier.weight(1f)) {
             Column(
@@ -198,7 +201,7 @@ fun RateScreen(
 }
 
 @Composable
-private fun TopBar(progressLabel: String, onOpenMenu: () -> Unit) {
+private fun TopBar(progressLabel: String, onOpenMenu: () -> Unit, onOpenBubble: () -> Unit) {
     val colors = LocalSumoColors.current
     Row(
         modifier = Modifier
@@ -220,7 +223,19 @@ private fun TopBar(progressLabel: String, onOpenMenu: () -> Unit) {
                 fontFeatureSettings = TabularNums,
             ),
         )
-        Spacer(modifier = Modifier.size(48.dp))
+        BubbleButton(onClick = onOpenBubble)
+    }
+}
+
+/** Opens the floating bubble so bouts can be rated on top of a video app. */
+@Composable
+private fun BubbleButton(onClick: () -> Unit) {
+    val colors = LocalSumoColors.current
+    IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
+        Canvas(modifier = Modifier.size(22.dp)) {
+            drawCircle(color = colors.ink, radius = size.minDimension / 2 - 1.dp.toPx(), style = Stroke(width = 2.dp.toPx()))
+            drawCircle(color = colors.ink, radius = size.minDimension * 0.2f)
+        }
     }
 }
 

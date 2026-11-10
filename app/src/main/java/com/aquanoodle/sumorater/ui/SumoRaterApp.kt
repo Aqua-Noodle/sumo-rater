@@ -19,8 +19,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.widget.Toast
+import com.aquanoodle.sumorater.sumoController
+import com.aquanoodle.sumorater.ui.bubble.BubbleService
 import com.aquanoodle.sumorater.data.allRatingsCsv
 import com.aquanoodle.sumorater.data.allRatingsFileName
 import com.aquanoodle.sumorater.data.bashoList
@@ -42,8 +47,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun SumoRaterApp() {
     val context = LocalContext.current
-    val viewModel: SumoViewModel = viewModel(factory = SumoViewModel.factory(context))
-    val state = viewModel.state
+    val controller = remember(context) { context.sumoController }
+    val state = controller.state
     val scope = rememberCoroutineScope()
 
     var pendingPhotoTarget by remember { mutableStateOf<Int?>(null) }
@@ -53,7 +58,7 @@ fun SumoRaterApp() {
         if (uri != null && target != null) {
             scope.launch {
                 val path = copyPhotoToInternalStorage(context, uri, target)
-                if (path != null) viewModel.setPhoto(target, path)
+                if (path != null) controller.setPhoto(target, path)
             }
         }
     }
@@ -83,11 +88,28 @@ fun SumoRaterApp() {
         createCsv.launch(fileName)
     }
 
+    val openBubble: () -> Unit = {
+        if (!Settings.canDrawOverlays(context)) {
+            Toast.makeText(
+                context,
+                "Allow \"Display over other apps\" for Sumo Rater, then tap the bubble button again.",
+                Toast.LENGTH_LONG,
+            ).show()
+            context.startActivity(
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
+            )
+        } else {
+            BubbleService.start(context)
+            // Step aside so the video app is right there with the bubble on top.
+            (context as? Activity)?.moveTaskToBack(true)
+        }
+    }
+
     (context as? ComponentActivity)?.let { activity ->
         LaunchedEffect(state.isDark) {
-            val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-            controller.isAppearanceLightStatusBars = !state.isDark
-            controller.isAppearanceLightNavigationBars = !state.isDark
+            val insets = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+            insets.isAppearanceLightStatusBars = !state.isDark
+            insets.isAppearanceLightNavigationBars = !state.isDark
         }
     }
 
@@ -105,11 +127,11 @@ fun SumoRaterApp() {
                 bashoLabel = bashoLabel(state.bashoId),
                 bashoList = remember { bashoList() },
                 day = state.day,
-                ratedRikishi = viewModel.perRikishiMap().size,
-                onPickBasho = viewModel::pickBasho,
-                onPickDay = viewModel::pickDay,
-                onStart = viewModel::enterRate,
-                onOpenTable = viewModel::openTable,
+                ratedRikishi = controller.perRikishiMap().size,
+                onPickBasho = controller::pickBasho,
+                onPickDay = controller::pickDay,
+                onStart = controller::enterRate,
+                onOpenTable = controller::openTable,
             )
 
             Screen.RATE -> RateScreen(
@@ -123,55 +145,56 @@ fun SumoRaterApp() {
                 note = state.note,
                 ratedToday = state.bouts.count { state.ratings[it.key]?.hasScore == true },
                 photos = state.photos,
-                onOpenMenu = viewModel::openMenu,
-                onOpenTable = viewModel::openTable,
-                onEastSettled = viewModel::onEastSettled,
-                onWestSettled = viewModel::onWestSettled,
-                onNoteChange = viewModel::onNoteChange,
-                onNext = viewModel::save,
-                onBack = viewModel::back,
-                onRestartDay = { viewModel.jumpTo(0) },
+                onOpenMenu = controller::openMenu,
+                onOpenTable = controller::openTable,
+                onEastSettled = controller::onEastSettled,
+                onWestSettled = controller::onWestSettled,
+                onNoteChange = controller::onNoteChange,
+                onNext = controller::save,
+                onBack = controller::back,
+                onRestartDay = { controller.jumpTo(0) },
                 onPhotoTap = requestPhoto,
+                onOpenBubble = openBubble,
             )
 
             Screen.MENU -> MenuScreen(
-                ratedRikishi = viewModel.perRikishiMap().size,
+                ratedRikishi = controller.perRikishiMap().size,
                 bashoLabel = bashoLabel(state.bashoId),
                 bashoList = remember { bashoList() },
                 day = state.day,
                 isDark = state.isDark,
-                onClose = viewModel::openRate,
-                onOpenTable = viewModel::openTable,
-                onPickBasho = viewModel::pickBasho,
-                onPickDay = viewModel::pickDay,
-                onToggleTheme = viewModel::toggleTheme,
+                onClose = controller::openRate,
+                onOpenTable = controller::openTable,
+                onPickBasho = controller::pickBasho,
+                onPickDay = controller::pickDay,
+                onToggleTheme = controller::toggleTheme,
                 onExportCsv = { exportCsv(allRatingsFileName(), allRatingsCsv(state.ratings)) },
             )
 
             Screen.TABLE -> TableScreen(
-                rows = viewModel.perRikishiMap().values.sortedByDescending { it.avgN },
+                rows = controller.perRikishiMap().values.sortedByDescending { it.avgN },
                 photos = state.photos,
-                onBack = viewModel::openMenu,
-                onOpenDetail = viewModel::openDetail,
+                onBack = controller::openMenu,
+                onOpenDetail = controller::openDetail,
                 onExportCsv = { exportCsv(allRatingsFileName(), allRatingsCsv(state.ratings)) },
             )
 
             Screen.DETAIL -> {
-                val aggregate = state.selected?.let { viewModel.perRikishiMap()[it] }
+                val aggregate = state.selected?.let { controller.perRikishiMap()[it] }
                 if (aggregate != null) {
                     DetailScreen(
                         rikishi = aggregate,
                         photoPath = state.photos[aggregate.id],
-                        chart = viewModel.chartFor(aggregate),
+                        chart = controller.chartFor(aggregate),
                         mode = state.mode,
-                        onBack = viewModel::openTable,
-                        onModeChange = viewModel::setMode,
+                        onBack = controller::openTable,
+                        onModeChange = controller::setMode,
                         onPhotoTap = { requestPhoto(aggregate.id) },
-                        onEditEntry = viewModel::editBout,
+                        onEditEntry = controller::editBout,
                         onExportCsv = { exportCsv(rikishiFileName(aggregate.name), rikishiCsv(aggregate)) },
                     )
                 } else {
-                    androidx.compose.runtime.LaunchedEffect(state.selected) { viewModel.openTable() }
+                    androidx.compose.runtime.LaunchedEffect(state.selected) { controller.openTable() }
                 }
             }
         }

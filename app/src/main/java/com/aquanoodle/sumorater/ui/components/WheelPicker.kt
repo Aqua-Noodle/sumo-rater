@@ -37,17 +37,16 @@ import com.aquanoodle.sumorater.ui.theme.Archivo
 import com.aquanoodle.sumorater.ui.theme.LocalSumoColors
 import com.aquanoodle.sumorater.ui.theme.TabularNums
 import kotlinx.coroutines.delay
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import kotlin.math.abs
 
-private const val ROW_HEIGHT_DP = 64
-private const val VIEWPORT_HEIGHT_DP = 192
-
 /**
- * A swipe-wheel number picker: 60dp wide, 192dp viewport, 64dp rows, fading
- * top/bottom edges, blank row last, snap-to-center. [items] holds the label
- * for every row ("" for the blank row). [targetIndex] is the authoritative
- * index (0-based) to jump to whenever the bout/value changes externally;
- * [onSettledIndexChange] fires ~90ms after the user stops scrolling.
+ * A swipe-wheel number picker: three [rowHeight] rows visible (selected row in the
+ * middle), fading top/bottom edges, blank row last, snap-to-center. [items] holds
+ * the label for every row ("" for the blank row). [targetIndex] is the
+ * authoritative index (0-based) to jump to whenever the bout/value changes
+ * externally; [onSettledIndexChange] fires ~90ms after the user stops scrolling.
  */
 @Composable
 fun WheelPicker(
@@ -55,6 +54,9 @@ fun WheelPicker(
     targetIndex: Int,
     onSettledIndexChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    width: Dp = 60.dp,
+    rowHeight: Dp = 64.dp,
+    fontSize: TextUnit = 46.sp,
 ) {
     val colors = LocalSumoColors.current
     val initialIndex = targetIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
@@ -87,17 +89,17 @@ fun WheelPicker(
     LazyColumn(
         state = listState,
         modifier = modifier
-            .width(60.dp)
-            .height(VIEWPORT_HEIGHT_DP.dp)
+            .width(width)
+            .height(rowHeight * 3)
             .verticalFadeEdges(),
         flingBehavior = rememberSnapFlingBehavior(listState, SnapPosition.Center),
-        contentPadding = PaddingValues(vertical = ROW_HEIGHT_DP.dp),
+        contentPadding = PaddingValues(vertical = rowHeight),
     ) {
         itemsIndexed(items) { _, label ->
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(ROW_HEIGHT_DP.dp),
+                    .height(rowHeight),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -105,7 +107,7 @@ fun WheelPicker(
                     style = TextStyle(
                         fontFamily = Archivo,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 46.sp,
+                        fontSize = fontSize,
                         letterSpacing = (-0.03f).em,
                         color = colors.ink,
                         textAlign = TextAlign.Center,

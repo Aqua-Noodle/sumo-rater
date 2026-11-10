@@ -80,5 +80,6 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil.compose)
+    implementation(libs.androidx.savedstate.ktx)
     debugImplementation(libs.androidx.ui.tooling)
 }
