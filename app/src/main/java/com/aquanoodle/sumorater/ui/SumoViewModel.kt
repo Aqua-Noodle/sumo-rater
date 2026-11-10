@@ -26,12 +26,24 @@ import com.aquanoodle.sumorater.data.toTorikumiRow
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
-/** Wheel rows top→bottom: 10, 9 … 0, then one blank row (= not rated). */
-const val WHEEL_BLANK_INDEX = 11
+/**
+ * Highest score a side's wheel offers. Both wheels start at 10…0 so an untouched
+ * bout gives nothing away; only once the winner has a score does the loser's
+ * wheel shrink to below it (the original rating rule).
+ */
+fun wheelTop(bout: Bout, east: Int?, west: Int?, isEast: Boolean): Int {
+    val eastWon = bout.winnerId == bout.eastId
+    val winnerScore = if (eastWon) east else west
+    val isLoser = isEast != eastWon
+    return if (isLoser && winnerScore != null) winnerScore - 1 else 10
+}
 
-fun wheelValueAt(index: Int): Int? = if (index >= WHEEL_BLANK_INDEX) null else (10 - index).coerceIn(0, 10)
+/** Wheel rows top→bottom: top, top-1 … 0, then one blank row (= not rated). */
+fun wheelItems(top: Int): List<String> = (top downTo 0).map { it.toString() } + ""
 
-fun wheelIndexOf(value: Int?): Int = if (value == null) WHEEL_BLANK_INDEX else 10 - value
+fun wheelValueAt(top: Int, index: Int): Int? = if (index > top) null else (top - index).coerceIn(0, top)
+
+fun wheelIndexOf(top: Int, value: Int?): Int = if (value == null) top + 1 else (top - value).coerceIn(0, top)
 
 class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
 
@@ -123,14 +135,24 @@ class SumoViewModel(private val repo: RatingsRepository) : ViewModel() {
         )
     }
 
-    fun onEastSettled(index: Int) {
-        val v = wheelValueAt(index)
-        if (v != state.east) state = state.copy(east = v)
-    }
+    fun onEastSettled(index: Int) = onSideSettled(isEast = true, index = index)
 
-    fun onWestSettled(index: Int) {
-        val v = wheelValueAt(index)
-        if (v != state.west) state = state.copy(west = v)
+    fun onWestSettled(index: Int) = onSideSettled(isEast = false, index = index)
+
+    /** Winner ∈ 1–10 or blank; loser ∈ 0–(winner−1), or 0–10 while the winner is blank. */
+    private fun onSideSettled(isEast: Boolean, index: Int) {
+        val bout = currentBout() ?: return
+        if (!bout.ratable) return
+        var v = wheelValueAt(wheelTop(bout, state.east, state.west, isEast), index)
+        val eastWon = bout.winnerId == bout.eastId
+        if (isEast == eastWon) {
+            if (v == 0) v = 1
+            var loser = if (eastWon) state.west else state.east
+            if (v != null && loser != null && loser >= v) loser = v - 1
+            state = if (isEast) state.copy(east = v, west = loser) else state.copy(west = v, east = loser)
+        } else {
+            state = if (isEast) state.copy(east = v) else state.copy(west = v)
+        }
     }
 
     fun onNoteChange(text: String) {

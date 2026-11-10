@@ -62,6 +62,8 @@ import com.aquanoodle.sumorater.ui.theme.Archivo
 import com.aquanoodle.sumorater.ui.theme.LocalSumoColors
 import com.aquanoodle.sumorater.ui.theme.TabularNums
 import com.aquanoodle.sumorater.ui.wheelIndexOf
+import com.aquanoodle.sumorater.ui.wheelItems
+import com.aquanoodle.sumorater.ui.wheelTop
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -78,8 +80,6 @@ private const val DASH_WIDTH_DP = 18
 private const val GAP_DP = 8
 private const val PHOTO_HEIGHT_DP = 118
 private const val PHOTO_TOP_OFFSET_DP = (WHEEL_VIEWPORT_DP - PHOTO_HEIGHT_DP) / 2
-
-private val WHEEL_ITEMS = (10 downTo 0).map { it.toString() } + ""
 
 @Composable
 fun RateScreen(
@@ -400,9 +400,15 @@ private fun BoutCard(
 
                 val reason = bout.unratableReason
                 if (reason == null) {
+                    val eastTop = wheelTop(bout, east, west, isEast = true)
+                    val westTop = wheelTop(bout, east, west, isEast = false)
                     // Keyed per bout so a wheel still settling can't write into the next bout.
                     key(bout.key) {
-                        WheelPicker(items = WHEEL_ITEMS, targetIndex = wheelIndexOf(east), onSettledIndexChange = onEastSettled)
+                        WheelPicker(
+                            items = remember(eastTop) { wheelItems(eastTop) },
+                            targetIndex = wheelIndexOf(eastTop, east),
+                            onSettledIndexChange = onEastSettled,
+                        )
                     }
                     Box(
                         modifier = Modifier
@@ -418,7 +424,11 @@ private fun BoutCard(
                         )
                     }
                     key(bout.key) {
-                        WheelPicker(items = WHEEL_ITEMS, targetIndex = wheelIndexOf(west), onSettledIndexChange = onWestSettled)
+                        WheelPicker(
+                            items = remember(westTop) { wheelItems(westTop) },
+                            targetIndex = wheelIndexOf(westTop, west),
+                            onSettledIndexChange = onWestSettled,
+                        )
                     }
                 } else {
                     UnratableMiddle(reason)
