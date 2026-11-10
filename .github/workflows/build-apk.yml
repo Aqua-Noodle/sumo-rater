@@ -64,7 +64,6 @@ jobs:
           if-no-files-found: error
 
       - name: Publish release with APK
-        if: github.event_name == 'push'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -73,7 +72,10 @@ jobs:
           NOTES="Debug-signed APK built from commit ${{ github.sha }} on branch \`${{ github.ref_name }}\`. Install by downloading \`app-debug.apk\` below and opening it on your phone (you may need to allow \"install unknown apps\" for your browser/file manager)."
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           for attempt in 1 2 3; do
+            # --target: tag the commit that was built; without it every tag lands on
+            # main's old commit and GitHub lists the releases out of order.
             if gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk \
+              --target "${{ github.sha }}" \
               --title "Sumo Rater APK (build ${{ github.run_number }})" \
               --notes "$NOTES" \
               --prerelease; then
