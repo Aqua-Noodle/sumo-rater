@@ -23,8 +23,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.aquanoodle.sumorater.data.AppUpdater
 import com.aquanoodle.sumorater.data.BashoOption
 import com.aquanoodle.sumorater.ui.components.BashoDayPicker
+import com.aquanoodle.sumorater.ui.components.UpdateRow
 import com.aquanoodle.sumorater.ui.theme.Archivo
 import com.aquanoodle.sumorater.ui.theme.LocalSumoColors
 
@@ -43,6 +45,7 @@ fun StartScreen(
     onPickDay: (Int) -> Unit,
     onStart: () -> Unit,
     onOpenTable: () -> Unit,
+    updater: AppUpdater,
 ) {
     val colors = LocalSumoColors.current
     Column(
@@ -85,6 +88,8 @@ fun StartScreen(
             )
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
+        UpdateRow(updater = updater)
         Spacer(modifier = Modifier.height(24.dp))
     }
 }

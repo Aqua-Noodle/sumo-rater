@@ -30,8 +30,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aquanoodle.sumorater.data.AppUpdater
 import com.aquanoodle.sumorater.data.BashoOption
 import com.aquanoodle.sumorater.ui.components.BashoDayPicker
+import com.aquanoodle.sumorater.ui.components.UpdateRow
 import com.aquanoodle.sumorater.ui.theme.Archivo
 import com.aquanoodle.sumorater.ui.theme.LocalSumoColors
 import com.aquanoodle.sumorater.ui.theme.TabularNums
@@ -49,6 +51,7 @@ fun MenuScreen(
     onPickDay: (Int) -> Unit,
     onToggleTheme: () -> Unit,
     onExportCsv: () -> Unit,
+    updater: AppUpdater,
 ) {
     val colors = LocalSumoColors.current
     Column(
@@ -113,6 +116,8 @@ fun MenuScreen(
                 Text("Export all ratings", style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = colors.ink))
                 Text("CSV →", style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.faint))
             }
+
+            UpdateRow(updater = updater)
 
             Text(
                 "Ratings are stored on this phone only.",

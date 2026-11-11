@@ -24,6 +24,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import com.aquanoodle.sumorater.appUpdater
 import com.aquanoodle.sumorater.sumoController
 import com.aquanoodle.sumorater.ui.bubble.BubbleService
 import com.aquanoodle.sumorater.data.allRatingsCsv
@@ -48,6 +49,7 @@ import kotlinx.coroutines.launch
 fun SumoRaterApp() {
     val context = LocalContext.current
     val controller = remember(context) { context.sumoController }
+    val updater = remember(context) { context.appUpdater }
     val state = controller.state
     val scope = rememberCoroutineScope()
 
@@ -132,6 +134,7 @@ fun SumoRaterApp() {
                 onPickDay = controller::pickDay,
                 onStart = controller::enterRate,
                 onOpenTable = controller::openTable,
+                updater = updater,
             )
 
             Screen.RATE -> RateScreen(
@@ -171,6 +174,7 @@ fun SumoRaterApp() {
                 onPickDay = controller::pickDay,
                 onToggleTheme = controller::toggleTheme,
                 onExportCsv = { exportCsv(allRatingsFileName(), allRatingsCsv(state.ratings)) },
+                updater = updater,
             )
 
             Screen.TABLE -> TableScreen(
