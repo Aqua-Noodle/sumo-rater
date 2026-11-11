@@ -140,6 +140,8 @@ fun SumoRaterApp() {
                 day = state.day,
                 bashoLabel = bashoLabel(state.bashoId),
                 loading = state.loading,
+                refreshing = state.refreshing,
+                onRefresh = { controller.refreshDay { msg -> Toast.makeText(context, msg, Toast.LENGTH_SHORT).show() } },
                 east = state.east,
                 west = state.west,
                 note = state.note,

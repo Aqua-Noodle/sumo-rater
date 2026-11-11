@@ -22,7 +22,9 @@ import com.aquanoodle.sumorater.data.toTorikumiRow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import com.aquanoodle.sumorater.data.TorikumiRow
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /**
@@ -105,16 +107,12 @@ class SumoController(private val repo: RatingsRepository) {
         val myToken = ++loadToken
         state = state.copy(loading = true, bouts = emptyList())
         scope.launch {
-            val juryoDeferred = async { SumoApi.fetchTorikumi(bashoId, "Juryo", day) }
-            val makuuchiDeferred = async { SumoApi.fetchTorikumi(bashoId, "Makuuchi", day) }
-            val juryo = juryoDeferred.await()
-            val makuuchi = makuuchiDeferred.await()
+            val fetched = fetchDay(bashoId, day)
             if (myToken != loadToken) return@launch
 
-            val src = if (juryo != null && makuuchi != null && (juryo.isNotEmpty() || makuuchi.isNotEmpty())) {
-                val fetched = mapOf("Juryo" to juryo, "Makuuchi" to makuuchi)
-                repo.saveDayCache(key, fetched)
-                fetched
+            val src = if (fetched.src != null) {
+                repo.saveDayCache(key, fetched.src)
+                fetched.src
             } else {
                 repo.loadDayCache(key) ?: SAMPLE[key]?.mapValues { (_, rows) -> rows.map { it.toTorikumiRow() } }
             }
@@ -125,6 +123,64 @@ class SumoController(private val repo: RatingsRepository) {
             val idx = (jumped ?: pos[key] ?: 0).coerceIn(0, bouts.size)
             state = state.copy(bouts = bouts, idx = idx, loading = false)
             loadBout()
+        }
+    }
+
+    private class DayFetch(val reachable: Boolean, val src: Map<String, List<TorikumiRow>>?)
+
+    /** [DayFetch.src] is null when the server couldn't be reached or has nothing for that day yet. */
+    private suspend fun fetchDay(bashoId: String, day: Int): DayFetch = coroutineScope {
+        val juryoDeferred = async { SumoApi.fetchTorikumi(bashoId, "Juryo", day) }
+        val makuuchiDeferred = async { SumoApi.fetchTorikumi(bashoId, "Makuuchi", day) }
+        val juryo = juryoDeferred.await()
+        val makuuchi = makuuchiDeferred.await()
+        val reachable = juryo != null && makuuchi != null
+        val hasData = !juryo.isNullOrEmpty() || !makuuchi.isNullOrEmpty()
+        DayFetch(reachable, if (reachable && hasData) mapOf("Juryo" to juryo!!, "Makuuchi" to makuuchi!!) else null)
+    }
+
+    /**
+     * Re-fetches the open day (e.g. while a basho is live) without moving off the
+     * current bout or discarding values entered but not yet saved.
+     * [onResult] gets a short message for the user.
+     */
+    fun refreshDay(onResult: (String) -> Unit = {}) {
+        if (state.refreshing || state.loading) return
+        val bashoId = state.bashoId
+        val day = state.day
+        val token = loadToken
+        state = state.copy(refreshing = true)
+        scope.launch {
+            val fetched = fetchDay(bashoId, day)
+            if (token != loadToken || bashoId != state.bashoId || day != state.day) {
+                state = state.copy(refreshing = false)
+                return@launch
+            }
+            val src = fetched.src
+            if (src == null) {
+                state = state.copy(refreshing = false)
+                onResult(if (fetched.reachable) "No results published yet" else "Couldn't reach the server")
+                return@launch
+            }
+            repo.saveDayCache(cacheKey(bashoId, day), src)
+            val hadBouts = state.bouts.isNotEmpty()
+            val ratableBefore = state.bouts.filter { it.ratable }.map { it.key }.toSet()
+            val currentKey = currentBout()?.key
+            val bouts = toBouts(bashoId, day, src)
+            val idx = currentKey?.let { k -> bouts.indexOfFirst { it.key == k }.takeIf { it >= 0 } }
+                ?: state.idx.coerceIn(0, bouts.size)
+            val sameBout = currentKey != null && bouts.getOrNull(idx)?.key == currentKey
+            state = state.copy(bouts = bouts, idx = idx, refreshing = false)
+            if (!sameBout) loadBout()
+            val newResults = bouts.count { it.ratable && it.key !in ratableBefore }
+            onResult(
+                when {
+                    !hadBouts -> "Bouts loaded"
+                    newResults == 0 -> "No new results yet"
+                    newResults == 1 -> "1 new result"
+                    else -> "$newResults new results"
+                }
+            )
         }
     }
 

@@ -33,11 +33,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -66,6 +71,7 @@ import com.aquanoodle.sumorater.ui.theme.TabularNums
 import com.aquanoodle.sumorater.ui.wheelIndexOf
 import com.aquanoodle.sumorater.ui.wheelItems
 import com.aquanoodle.sumorater.ui.wheelTop
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -83,6 +89,7 @@ private const val GAP_DP = 8
 private const val PHOTO_HEIGHT_DP = 118
 private const val PHOTO_TOP_OFFSET_DP = (WHEEL_VIEWPORT_DP - PHOTO_HEIGHT_DP) / 2
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RateScreen(
     bouts: List<Bout>,
@@ -90,6 +97,8 @@ fun RateScreen(
     day: Int,
     bashoLabel: String,
     loading: Boolean,
+    refreshing: Boolean,
+    onRefresh: () -> Unit,
     east: Int?,
     west: Int?,
     note: String,
@@ -127,7 +136,44 @@ fun RateScreen(
     ) {
         TopBar(progressLabel = progressLabel, onOpenMenu = onOpenMenu, onOpenBubble = onOpenBubble)
 
-        BoxWithConstraints(modifier = Modifier.weight(1f)) {
+        val scope = rememberCoroutineScope()
+        val swipe = remember { CardSwipe(scope) }
+        val cardTransform = Modifier.graphicsLayer {
+            val dp = swipe.offsetDp
+            translationX = dp * density
+            rotationZ = dp / 40f
+            alpha = swipe.alpha
+        }
+        // The swipe starts anywhere in the middle area; the vertical wheels and the
+        // pull-to-refresh still get vertical drags.
+        val swipeArea = if (bout == null) Modifier else Modifier.pointerInput(canBack) {
+            detectHorizontalDragGestures(
+                onDragStart = { swipe.start() },
+                onDragEnd = { swipe.end(canBack, onNext, onBack) },
+                onDragCancel = { swipe.cancel() },
+            ) { change, dragAmount ->
+                change.consume()
+                swipe.drag(dragAmount / density)
+            }
+        }
+        val pullState = rememberPullToRefreshState()
+
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = onRefresh,
+            state = pullState,
+            modifier = Modifier.weight(1f),
+            indicator = {
+                PullToRefreshDefaults.Indicator(
+                    state = pullState,
+                    isRefreshing = refreshing,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    containerColor = colors.bg,
+                    color = colors.ink,
+                )
+            },
+        ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize().then(swipeArea)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -142,12 +188,10 @@ fun RateScreen(
                         west = west,
                         note = note,
                         photos = photos,
-                        canSwipeRight = canBack,
+                        cardTransform = cardTransform,
                         onEastSettled = onEastSettled,
                         onWestSettled = onWestSettled,
                         onNoteChange = onNoteChange,
-                        onSwipeLeft = onNext,
-                        onSwipeRight = onBack,
                         onPhotoTap = onPhotoTap,
                     )
                     isDone -> DoneState(
@@ -158,11 +202,12 @@ fun RateScreen(
                         onRestartDay = onRestartDay,
                     )
                     isEmpty -> EmptyState(
-                        message = if (loading) "Loading…" else "No bout data available for $bashoLabel, day $day.",
+                        message = if (loading) "Loading…" else "No bout data available for $bashoLabel, day $day. Pull down to try again.",
                         onPickAnotherDay = onOpenMenu,
                     )
                 }
             }
+        }
         }
 
         Row(
@@ -319,7 +364,63 @@ private fun EmptyState(message: String, onPickAnotherDay: () -> Unit) {
     }
 }
 
-private enum class SwipePhase { IDLE, DRAGGING }
+/**
+ * Swipe-to-change-bout state. Lives at screen level (not inside the card) so the
+ * gesture can start anywhere in the middle of the screen and the fly-in animation
+ * survives the bout changing underneath it.
+ */
+@Stable
+private class CardSwipe(private val scope: CoroutineScope) {
+    private val anim = Animatable(0f)
+    private val fade = Animatable(1f)
+    private var dragging by mutableStateOf(false)
+    private var dragDp by mutableFloatStateOf(0f)
+    private val bounce = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 380f)
+
+    val offsetDp: Float get() = if (dragging) dragDp else anim.value
+    val alpha: Float get() = fade.value
+
+    fun start() {
+        dragging = true
+        dragDp = anim.value
+    }
+
+    fun drag(deltaDp: Float) {
+        dragDp += deltaDp
+    }
+
+    fun cancel() = settle(stopDragging())
+
+    fun end(canSwipeRight: Boolean, onLeft: () -> Unit, onRight: () -> Unit) {
+        val d = stopDragging()
+        if (abs(d) > SWIPE_THRESHOLD_DP && (d < 0 || canSwipeRight)) fly(d, if (d < 0) -1 else 1, onLeft, onRight) else settle(d)
+    }
+
+    private fun stopDragging(): Float {
+        dragging = false
+        return dragDp
+    }
+
+    private fun settle(from: Float) {
+        scope.launch {
+            anim.snapTo(from)
+            anim.animateTo(0f, bounce)
+        }
+    }
+
+    private fun fly(from: Float, direction: Int, onLeft: () -> Unit, onRight: () -> Unit) {
+        scope.launch {
+            anim.snapTo(from)
+            launch { fade.animateTo(0f, tween(220)) }
+            anim.animateTo(direction * FLY_DISTANCE_DP, tween(220))
+            if (direction < 0) onLeft() else onRight()
+            anim.snapTo(-direction * ENTER_OFFSET_DP)
+            fade.snapTo(0f)
+            launch { fade.animateTo(1f, tween(250)) }
+            anim.animateTo(0f, bounce)
+        }
+    }
+}
 
 @Composable
 private fun BoutCard(
@@ -328,81 +429,15 @@ private fun BoutCard(
     west: Int?,
     note: String,
     photos: Map<Int, String>,
-    canSwipeRight: Boolean,
+    cardTransform: Modifier,
     onEastSettled: (Int) -> Unit,
     onWestSettled: (Int) -> Unit,
     onNoteChange: (String) -> Unit,
-    onSwipeLeft: () -> Unit,
-    onSwipeRight: () -> Unit,
     onPhotoTap: (Int) -> Unit,
 ) {
     val colors = LocalSumoColors.current
-    val scope = rememberCoroutineScope()
-    val animOffsetDp = remember { Animatable(0f) }
-    val alpha = remember { Animatable(1f) }
-    var phase by remember { mutableStateOf(SwipePhase.IDLE) }
-    var dragOffsetDp by remember { mutableFloatStateOf(0f) }
-
-    val bounceSpec = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 380f)
-
-    fun settleBack(from: Float) {
-        scope.launch {
-            animOffsetDp.snapTo(from)
-            animOffsetDp.animateTo(0f, bounceSpec)
-        }
-    }
-
-    fun flyOutThenAdvance(from: Float, direction: Int) {
-        scope.launch {
-            animOffsetDp.snapTo(from)
-            launch { alpha.animateTo(0f, tween(220)) }
-            animOffsetDp.animateTo(direction * FLY_DISTANCE_DP, tween(220))
-            if (direction < 0) onSwipeLeft() else onSwipeRight()
-            animOffsetDp.snapTo(-direction * ENTER_OFFSET_DP)
-            alpha.snapTo(0f)
-            launch { alpha.animateTo(1f, tween(250)) }
-            animOffsetDp.animateTo(0f, bounceSpec)
-        }
-    }
-
-    // The whole card moves with the swipe; only the wrestler row (not the notes box) starts one.
-    val cardTransform = Modifier.graphicsLayer {
-        val dp = if (phase == SwipePhase.DRAGGING) dragOffsetDp else animOffsetDp.value
-        translationX = dp * density
-        rotationZ = dp / 40f
-        this.alpha = alpha.value
-    }
-
     Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .pointerInput(canSwipeRight) {
-                    detectHorizontalDragGestures(
-                        onDragStart = {
-                            phase = SwipePhase.DRAGGING
-                            dragOffsetDp = animOffsetDp.value
-                        },
-                        onDragEnd = {
-                            val d = dragOffsetDp
-                            phase = SwipePhase.IDLE
-                            if (abs(d) > SWIPE_THRESHOLD_DP && (d < 0 || canSwipeRight)) {
-                                flyOutThenAdvance(d, if (d < 0) -1 else 1)
-                            } else {
-                                settleBack(d)
-                            }
-                        },
-                        onDragCancel = {
-                            val d = dragOffsetDp
-                            phase = SwipePhase.IDLE
-                            settleBack(d)
-                        },
-                    ) { change, dragAmount ->
-                        change.consume()
-                        dragOffsetDp += dragAmount / density
-                    }
-                },
-        ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier.fillMaxWidth().then(cardTransform),
                 horizontalArrangement = Arrangement.spacedBy(GAP_DP.dp, Alignment.CenterHorizontally),

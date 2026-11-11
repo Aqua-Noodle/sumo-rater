@@ -37,8 +37,13 @@ import com.aquanoodle.sumorater.ui.theme.Archivo
 import com.aquanoodle.sumorater.ui.theme.LocalSumoColors
 import com.aquanoodle.sumorater.ui.theme.TabularNums
 import kotlinx.coroutines.delay
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.Velocity
 import kotlin.math.abs
 
 /**
@@ -91,6 +96,7 @@ fun WheelPicker(
         modifier = modifier
             .width(width)
             .height(rowHeight * 3)
+            .nestedScroll(KeepScrollInWheel)
             .verticalFadeEdges(),
         flingBehavior = rememberSnapFlingBehavior(listState, SnapPosition.Center),
         contentPadding = PaddingValues(vertical = rowHeight),
@@ -117,6 +123,15 @@ fun WheelPicker(
             }
         }
     }
+}
+
+/**
+ * Swallows scroll the wheel has left over at its ends, so spinning past 10 doesn't
+ * pull the page down and trigger pull-to-refresh.
+ */
+private object KeepScrollInWheel : NestedScrollConnection {
+    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = available
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available
 }
 
 private fun centeredIndex(listState: LazyListState): Int? {

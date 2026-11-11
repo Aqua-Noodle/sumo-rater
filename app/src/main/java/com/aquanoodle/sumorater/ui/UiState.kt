@@ -17,6 +17,7 @@ data class UiState(
     val bashoId: String = "",
     val day: Int = 1,
     val loading: Boolean = false,
+    val refreshing: Boolean = false,
     val selected: Int? = null,
     val mode: ChartMode = ChartMode.DAY,
     val isDark: Boolean = false,

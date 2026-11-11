@@ -1,6 +1,8 @@
 package com.aquanoodle.sumorater.ui.bubble
 
 import android.view.MotionEvent
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -171,6 +173,11 @@ private fun RatingPanel(
                     overflow = TextOverflow.Ellipsis,
                     style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, letterSpacing = 0.12f.em, color = colors.mute, fontFeatureSettings = TabularNums),
                 )
+            }
+            // No pull-down gesture in a floating panel, so refresh gets a button.
+            val context = LocalContext.current
+            HeaderButton(if (state.refreshing) "…" else "↻") {
+                controller.refreshDay { msg -> Toast.makeText(context, msg, Toast.LENGTH_SHORT).show() }
             }
             HeaderButton("—", onCollapse)
             HeaderButton("×", onClose)
