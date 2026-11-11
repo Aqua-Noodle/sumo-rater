@@ -22,7 +22,8 @@ android {
     // app (keeping its data) when both are signed with the same key; without it,
     // each CI machine signs with its own throwaway debug key.
     val sharedKeystore = rootProject.file("keystore/sumo-rater.jks")
-    val signingPassword = System.getenv("SIGNING_PASSWORD") ?: "sumorater"
+    // CI sets this to "" (not unset) when no SIGNING_PASSWORD secret exists.
+    val signingPassword = System.getenv("SIGNING_PASSWORD")?.takeIf { it.isNotBlank() } ?: "sumorater"
     signingConfigs {
         if (sharedKeystore.exists()) {
             create("shared") {
