@@ -27,6 +27,12 @@ import android.widget.Toast
 import com.aquanoodle.sumorater.appUpdater
 import com.aquanoodle.sumorater.sumoController
 import com.aquanoodle.sumorater.ui.bubble.BubbleService
+import com.aquanoodle.sumorater.data.BashoOption
+import com.aquanoodle.sumorater.data.CsvImport
+import com.aquanoodle.sumorater.data.bestBouts
+import com.aquanoodle.sumorater.data.overviewRows
+import com.aquanoodle.sumorater.data.parseRatingsCsv
+import com.aquanoodle.sumorater.ui.screens.BestScreen
 import com.aquanoodle.sumorater.data.allRatingsCsv
 import com.aquanoodle.sumorater.data.allRatingsFileName
 import com.aquanoodle.sumorater.data.bashoList
@@ -85,6 +91,29 @@ fun SumoRaterApp() {
             }
         }
     }
+    val importCsv = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching { context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() } }.getOrNull()
+            }
+            val message = when (val parsed = text?.let { parseRatingsCsv(it) }) {
+                null -> "Couldn't read that file"
+                is CsvImport.Error -> parsed.message
+                is CsvImport.Ok -> {
+                    val (added, updated) = controller.importRatings(parsed.ratings)
+                    buildString {
+                        append("Imported: $added new, $updated updated")
+                        val unchanged = parsed.ratings.size - added - updated
+                        if (unchanged > 0) append(", $unchanged already up to date")
+                        if (parsed.skipped > 0) append(", ${parsed.skipped} unreadable rows skipped")
+                    }
+                }
+            }
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
     val exportCsv: (String, String) -> Unit = { fileName, csv ->
         pendingCsv = csv
         createCsv.launch(fileName)
@@ -129,6 +158,7 @@ fun SumoRaterApp() {
                 bashoLabel = bashoLabel(state.bashoId),
                 bashoList = remember { bashoList() },
                 day = state.day,
+                ratedDays = controller.ratedDays(state.bashoId),
                 ratedRikishi = controller.perRikishiMap().size,
                 onPickBasho = controller::pickBasho,
                 onPickDay = controller::pickDay,
@@ -155,6 +185,8 @@ fun SumoRaterApp() {
                 onEastSettled = controller::onEastSettled,
                 onWestSettled = controller::onWestSettled,
                 onNoteChange = controller::onNoteChange,
+                onToggleTag = controller::toggleTag,
+                tags = state.tags,
                 onNext = controller::save,
                 onBack = controller::back,
                 onRestartDay = { controller.jumpTo(0) },
@@ -173,16 +205,36 @@ fun SumoRaterApp() {
                 onPickBasho = controller::pickBasho,
                 onPickDay = controller::pickDay,
                 onToggleTheme = controller::toggleTheme,
+                ratedDays = controller.ratedDays(state.bashoId),
+                onImportCsv = { importCsv.launch(arrayOf("text/*", "application/csv", "application/octet-stream")) },
+                onOpenBest = controller::openBest,
                 onExportCsv = { exportCsv(allRatingsFileName(), allRatingsCsv(state.ratings)) },
                 updater = updater,
             )
 
             Screen.TABLE -> TableScreen(
-                rows = controller.perRikishiMap().values.sortedByDescending { it.avgN },
+                rows = overviewRows(state.ratings, state.tableBasho, state.tableDiv, state.tableSort),
                 photos = state.photos,
                 onBack = controller::openMenu,
                 onOpenDetail = controller::openDetail,
                 onExportCsv = { exportCsv(allRatingsFileName(), allRatingsCsv(state.ratings)) },
+                hasAnyRatings = state.ratings.values.any { it.hasScore },
+                bashoOptions = state.ratings.values.map { it.bashoId }.distinct().sortedDescending().map { BashoOption(it, bashoLabel(it)) },
+                selectedBasho = state.tableBasho,
+                selectedDiv = state.tableDiv,
+                sort = state.tableSort,
+                onFilter = controller::setTableFilter,
+                onSort = controller::setTableSort,
+            )
+
+            Screen.BEST -> BestScreen(
+                bouts = bestBouts(state.ratings, state.bestScope, state.bashoId, state.day),
+                scope = state.bestScope,
+                bashoLabel = bashoLabel(state.bashoId),
+                day = state.day,
+                onScope = controller::setBestScope,
+                onBack = controller::openMenu,
+                onOpenBout = { key, r -> controller.editBout(key, r.bashoId, r.day) },
             )
 
             Screen.DETAIL -> {
@@ -196,7 +248,7 @@ fun SumoRaterApp() {
                         onBack = controller::openTable,
                         onModeChange = controller::setMode,
                         onPhotoTap = { requestPhoto(aggregate.id) },
-                        onEditEntry = controller::editBout,
+                        onEditEntry = { controller.editBout(it) },
                         onExportCsv = { exportCsv(rikishiFileName(aggregate.name), rikishiCsv(aggregate)) },
                     )
                 } else {

@@ -23,6 +23,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import com.aquanoodle.sumorater.data.TorikumiRow
+import com.aquanoodle.sumorater.data.BestScope
+import com.aquanoodle.sumorater.data.QUICK_TAGS
+import com.aquanoodle.sumorater.data.TableSort
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -122,8 +125,21 @@ class SumoController(private val repo: RatingsRepository) {
             val jumped = jumpKey?.let { k -> bouts.indexOfFirst { it.key == k }.takeIf { it >= 0 } }
             val idx = (jumped ?: pos[key] ?: 0).coerceIn(0, bouts.size)
             state = state.copy(bouts = bouts, idx = idx, loading = false)
+            backfillKimarite(bouts)
             loadBout()
         }
+    }
+
+    /** Ratings saved before kimarite were recorded pick it up once their day is loaded. */
+    private fun backfillKimarite(bouts: List<Bout>) {
+        val missing = bouts.mapNotNull { b ->
+            val r = state.ratings[b.key] ?: return@mapNotNull null
+            if (r.kimarite == null && b.ratable && b.kimarite.isNotBlank()) b.key to r.copy(kimarite = b.kimarite) else null
+        }
+        if (missing.isEmpty()) return
+        val ratings = state.ratings + missing
+        state = state.copy(ratings = ratings)
+        scope.launch { repo.saveRatings(ratings) }
     }
 
     private class DayFetch(val reachable: Boolean, val src: Map<String, List<TorikumiRow>>?)
@@ -171,6 +187,7 @@ class SumoController(private val repo: RatingsRepository) {
                 ?: state.idx.coerceIn(0, bouts.size)
             val sameBout = currentKey != null && bouts.getOrNull(idx)?.key == currentKey
             state = state.copy(bouts = bouts, idx = idx, refreshing = false)
+            backfillKimarite(bouts)
             if (!sameBout) loadBout()
             val newResults = bouts.count { it.ratable && it.key !in ratableBefore }
             onResult(
@@ -194,7 +211,12 @@ class SumoController(private val repo: RatingsRepository) {
             east = saved?.let { if (eastIsWinner) it.w else it.l },
             west = saved?.let { if (eastIsWinner) it.l else it.w },
             note = saved?.note.orEmpty(),
+            tags = saved?.tags.orEmpty().toSet(),
         )
+    }
+
+    fun toggleTag(tag: String) {
+        state = state.copy(tags = if (tag in state.tags) state.tags - tag else state.tags + tag)
     }
 
     fun onEastSettled(index: Int) = onSideSettled(isEast = true, index = index)
@@ -227,7 +249,8 @@ class SumoController(private val repo: RatingsRepository) {
         val ratings = state.ratings.toMutableMap()
         if (bout.ratable) {
             val note = state.note.trim().ifEmpty { null }
-            if (state.east == null && state.west == null && note == null) {
+            val tags = QUICK_TAGS.filter { it in state.tags }
+            if (state.east == null && state.west == null && note == null && tags.isEmpty()) {
                 ratings.remove(bout.key)
             } else {
                 val eastWon = bout.winnerId == bout.eastId
@@ -245,6 +268,8 @@ class SumoController(private val repo: RatingsRepository) {
                     l = if (eastWon) state.west else state.east,
                     ts = System.currentTimeMillis(),
                     note = note,
+                    kimarite = bout.kimarite.ifBlank { null },
+                    tags = tags,
                 )
                 val existing = ratings[bout.key]
                 // Paging past an unchanged bout shouldn't bump its timestamp.
@@ -276,9 +301,55 @@ class SumoController(private val repo: RatingsRepository) {
     }
 
     /** Opens the bout behind a saved rating so it can be changed. */
-    fun editBout(entry: RikishiEntry) {
-        state = state.copy(bashoId = entry.bashoId, day = entry.day, screen = Screen.RATE, bouts = emptyList(), idx = 0)
-        loadDay(jumpKey = entry.key)
+    fun editBout(entry: RikishiEntry) = editBout(entry.key, entry.bashoId, entry.day)
+
+    fun editBout(key: String, bashoId: String, day: Int) {
+        state = state.copy(bashoId = bashoId, day = day, screen = Screen.RATE, bouts = emptyList(), idx = 0)
+        loadDay(jumpKey = key)
+    }
+
+    fun openBest() {
+        state = state.copy(screen = Screen.BEST)
+    }
+
+    fun setBestScope(scope: BestScope) {
+        state = state.copy(bestScope = scope)
+    }
+
+    fun setTableFilter(bashoId: String?, div: String?) {
+        state = state.copy(tableBasho = bashoId, tableDiv = div)
+    }
+
+    fun setTableSort(sort: TableSort) {
+        state = state.copy(tableSort = sort)
+    }
+
+    /** Days of [bashoId] with at least one scored bout, for the calendar's rated markers. */
+    fun ratedDays(bashoId: String): Set<Int> =
+        state.ratings.values.filter { it.bashoId == bashoId && it.hasScore }.map { it.day }.toSet()
+
+    /**
+     * Merges imported ratings: new bouts are added; for bouts already on the phone
+     * the more recently rated version wins. Returns (added, updated).
+     */
+    fun importRatings(imported: List<Rating>): Pair<Int, Int> {
+        val ratings = state.ratings.toMutableMap()
+        var added = 0
+        var updated = 0
+        imported.forEach { r ->
+            val key = ratingKey(r)
+            val existing = ratings[key]
+            when {
+                existing == null -> { ratings[key] = r; added++ }
+                r.ts > existing.ts && r.copy(ts = 0) != existing.copy(ts = 0) -> { ratings[key] = r; updated++ }
+            }
+        }
+        if (added + updated > 0) {
+            state = state.copy(ratings = ratings)
+            scope.launch { repo.saveRatings(ratings) }
+            loadBout()
+        }
+        return added to updated
     }
 
     fun openMenu() {

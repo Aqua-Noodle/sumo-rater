@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -63,6 +65,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.aquanoodle.sumorater.data.Bout
+import com.aquanoodle.sumorater.data.QUICK_TAGS
+import com.aquanoodle.sumorater.data.kimariteLabel
 import com.aquanoodle.sumorater.ui.components.RikishiPhoto
 import com.aquanoodle.sumorater.ui.components.WheelPicker
 import com.aquanoodle.sumorater.ui.theme.Archivo
@@ -102,6 +106,7 @@ fun RateScreen(
     east: Int?,
     west: Int?,
     note: String,
+    tags: Set<String>,
     ratedToday: Int,
     photos: Map<Int, String>,
     onOpenMenu: () -> Unit,
@@ -109,6 +114,7 @@ fun RateScreen(
     onEastSettled: (Int) -> Unit,
     onWestSettled: (Int) -> Unit,
     onNoteChange: (String) -> Unit,
+    onToggleTag: (String) -> Unit,
     onNext: () -> Unit,
     onBack: () -> Unit,
     onRestartDay: () -> Unit,
@@ -187,8 +193,10 @@ fun RateScreen(
                         east = east,
                         west = west,
                         note = note,
+                        tags = tags,
                         photos = photos,
                         cardTransform = cardTransform,
+                        onToggleTag = onToggleTag,
                         onEastSettled = onEastSettled,
                         onWestSettled = onWestSettled,
                         onNoteChange = onNoteChange,
@@ -428,11 +436,13 @@ private fun BoutCard(
     east: Int?,
     west: Int?,
     note: String,
+    tags: Set<String>,
     photos: Map<Int, String>,
     cardTransform: Modifier,
     onEastSettled: (Int) -> Unit,
     onWestSettled: (Int) -> Unit,
     onNoteChange: (String) -> Unit,
+    onToggleTag: (String) -> Unit,
     onPhotoTap: (Int) -> Unit,
 ) {
     val colors = LocalSumoColors.current
@@ -501,6 +511,20 @@ private fun BoutCard(
                 Text("WEST", style = faintCaption)
             }
 
+            // Kimarite appears once you've started scoring: same "reveal on interaction"
+            // rule as the wheels, so an untouched bout still gives nothing away.
+            val kimarite = kimariteLabel(bout.kimarite)
+            if (kimarite != null && (east != null || west != null)) {
+                Text(
+                    kimarite.uppercase(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp).then(cardTransform),
+                    textAlign = TextAlign.Center,
+                    style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 11.sp, letterSpacing = 0.16f.em, color = colors.mute),
+                )
+            }
+
+            TagChips(selected = tags, onToggle = onToggleTag, modifier = Modifier.then(cardTransform))
+
             key(bout.key) {
                 NotesSection(note = note, onNoteChange = onNoteChange, modifier = Modifier.then(cardTransform))
             }
@@ -524,6 +548,31 @@ private fun UnratableMiddle(reason: String) {
                 "NOT RATED",
                 style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.18f.em, color = colors.faint),
             )
+        }
+    }
+}
+
+/** One-tap labels for the bout; quicker than typing a note during a live day. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TagChips(selected: Set<String>, onToggle: (String) -> Unit, modifier: Modifier = Modifier) {
+    val colors = LocalSumoColors.current
+    FlowRow(
+        modifier = modifier.fillMaxWidth().padding(top = 16.dp, start = 8.dp, end = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        QUICK_TAGS.forEach { tag ->
+            val on = tag in selected
+            Box(
+                modifier = Modifier
+                    .border(1.dp, if (on) colors.ink else colors.line)
+                    .background(if (on) colors.ink else colors.bg)
+                    .clickable { onToggle(tag) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(tag, style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = if (on) colors.bg else colors.ink))
+            }
         }
     }
 }

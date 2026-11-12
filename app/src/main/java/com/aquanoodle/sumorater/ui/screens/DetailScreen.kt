@@ -26,6 +26,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.aquanoodle.sumorater.data.kimariteLabel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -64,6 +71,9 @@ fun DetailScreen(
     onExportCsv: () -> Unit,
 ) {
     val colors = LocalSumoColors.current
+    // Head-to-head: when an opponent is picked, the bout list shows only bouts against them.
+    var opponent by remember(rikishi.id) { mutableStateOf<Int?>(null) }
+    val shown = opponent?.let { id -> rikishi.list.filter { it.oppId == id } } ?: rikishi.list
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -138,15 +148,25 @@ fun DetailScreen(
                 }
             }
 
+            item { StatsBlock(rikishi.list) }
+
+            item {
+                HeadToHead(
+                    entries = rikishi.list,
+                    selected = opponent,
+                    onSelect = { opponent = if (opponent == it) null else it },
+                )
+            }
+
             item {
                 Text(
-                    "Tap a bout to change its rating or note.",
+                    "Tap a bout to change its rating, tags or note.",
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
                     style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, color = colors.faint),
                 )
             }
 
-            items(rikishi.list.reversed(), key = { it.key }) { entry ->
+            items(shown.reversed(), key = { it.key }) { entry ->
                 RatingRow(entry, onClick = { onEditEntry(entry) })
             }
         }
@@ -212,6 +232,14 @@ private fun RatingRow(entry: RikishiEntry, onClick: () -> Unit) {
                 "${bashoLabel(entry.bashoId)} · Day ${entry.day}",
                 style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, letterSpacing = 0.04f.em, color = fg.copy(alpha = 0.7f)),
             )
+            val extra = listOfNotNull(kimariteLabel(entry.kimarite)) + entry.tags
+            if (extra.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    extra.joinToString(" · "),
+                    style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, color = fg.copy(alpha = 0.7f)),
+                )
+            }
             if (!entry.note.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -230,5 +258,82 @@ private fun RatingRow(entry: RikishiEntry, onClick: () -> Unit) {
             textAlign = TextAlign.End,
             style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 24.sp, color = fg, fontFeatureSettings = TabularNums),
         )
+    }
+}
+
+/** Record and best/worst bouts within the bouts you've rated. */
+@Composable
+private fun StatsBlock(list: List<RikishiEntry>) {
+    val colors = LocalSumoColors.current
+    if (list.isEmpty()) return
+    val wins = list.count { it.won }
+    val best = list.maxBy { it.rating }
+    val worst = list.minBy { it.rating }
+    fun line(e: RikishiEntry) = "${e.rating} vs ${e.opp} · ${bashoLabel(e.bashoId)} d${e.day}"
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp)) {
+        StatLine("Record in rated bouts", "$wins–${list.size - wins}")
+        StatLine("Best", line(best))
+        if (list.size > 1) StatLine("Worst", line(worst))
+    }
+}
+
+@Composable
+private fun StatLine(label: String, value: String) {
+    val colors = LocalSumoColors.current
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            label.uppercase(),
+            modifier = Modifier.width(150.dp),
+            style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.14f.em, color = colors.faint),
+        )
+        Text(value, style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.ink, fontFeatureSettings = TabularNums))
+    }
+}
+
+/** Opponents faced, most bouts first; tap one to filter the list to that matchup. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HeadToHead(entries: List<RikishiEntry>, selected: Int?, onSelect: (Int) -> Unit) {
+    val colors = LocalSumoColors.current
+    val byOpp = entries.groupBy { it.oppId }.values
+        .sortedWith(compareByDescending<List<RikishiEntry>> { it.size }.thenBy { it.last().opp })
+    if (byOpp.isEmpty()) return
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp)) {
+        Text(
+            "HEAD-TO-HEAD",
+            style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.14f.em, color = colors.faint),
+        )
+        FlowRow(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            byOpp.forEach { bouts ->
+                val id = bouts.first().oppId
+                val on = id == selected
+                val wins = bouts.count { it.won }
+                Box(
+                    modifier = Modifier
+                        .border(1.dp, if (on) colors.ink else colors.line)
+                        .background(if (on) colors.ink else colors.bg)
+                        .clickable { onSelect(id) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        "${bouts.last().opp} ${wins}–${bouts.size - wins}",
+                        style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = if (on) colors.bg else colors.ink, fontFeatureSettings = TabularNums),
+                    )
+                }
+            }
+        }
+        selected?.let { id ->
+            val vs = entries.filter { it.oppId == id }
+            val avg = vs.map { it.rating }.average()
+            Text(
+                "Avg ${String.format(java.util.Locale.US, "%.1f", avg)} in ${vs.size} bout${if (vs.size == 1) "" else "s"} vs ${vs.last().opp}",
+                modifier = Modifier.padding(top = 8.dp),
+                style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = colors.mute),
+            )
+        }
     }
 }

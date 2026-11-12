@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -41,6 +44,7 @@ fun BashoDayPicker(
     onPickBasho: (String) -> Unit,
     onPickDay: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    ratedDays: Set<Int> = emptySet(),
 ) {
     Column(modifier = modifier) {
         Column(
@@ -57,7 +61,7 @@ fun BashoDayPicker(
         Column(modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 18.dp)) {
             SectionLabel("Day")
             Spacer(modifier = Modifier.height(10.dp))
-            DayGrid(selectedDay = day, onPick = onPickDay)
+            DayGrid(selectedDay = day, onPick = onPickDay, ratedDays = ratedDays)
         }
     }
 }
@@ -103,7 +107,7 @@ fun BashoSelect(bashoLabel: String, bashoList: List<BashoOption>, onPick: (Strin
 }
 
 @Composable
-fun DayGrid(selectedDay: Int, onPick: (Int) -> Unit) {
+fun DayGrid(selectedDay: Int, onPick: (Int) -> Unit, ratedDays: Set<Int> = emptySet()) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         (1..15).chunked(5).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
@@ -111,6 +115,7 @@ fun DayGrid(selectedDay: Int, onPick: (Int) -> Unit) {
                     DayButton(
                         day = d,
                         selected = d == selectedDay,
+                        rated = d in ratedDays,
                         onClick = { onPick(d) },
                         modifier = Modifier.weight(1f),
                     )
@@ -121,8 +126,9 @@ fun DayGrid(selectedDay: Int, onPick: (Int) -> Unit) {
 }
 
 @Composable
-private fun DayButton(day: Int, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun DayButton(day: Int, selected: Boolean, rated: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = LocalSumoColors.current
+    val fg = if (selected) colors.bg else colors.ink
     Box(
         modifier = modifier
             .height(44.dp)
@@ -137,9 +143,20 @@ private fun DayButton(day: Int, selected: Boolean, onClick: () -> Unit, modifier
                 fontFamily = Archivo,
                 fontWeight = FontWeight.Medium,
                 fontSize = 15.sp,
-                color = if (selected) colors.bg else colors.ink,
+                color = fg,
                 fontFeatureSettings = TabularNums,
             ),
         )
+        if (rated) {
+            // Days you've already rated something on.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 6.dp)
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(fg),
+            )
+        }
     }
 }

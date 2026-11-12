@@ -80,9 +80,20 @@ data class Rating(
     val l: Int? = null,
     val ts: Long = 0,
     val note: String? = null,
+    val kimarite: String? = null,
+    val tags: List<String> = emptyList(),
 ) {
     val hasScore: Boolean get() = w != null || l != null
+
+    /** Combined bout score used to rank "best bouts". */
+    val total: Int get() = (w ?: 0) + (l ?: 0)
 }
+
+/** One-tap labels offered under every ratable bout, in display order. */
+val QUICK_TAGS = listOf("Great tachiai", "Long bout", "Close call", "Upset", "Henka", "Matta", "Monoii")
+
+/** "yorikiri" -> "Yorikiri" */
+fun kimariteLabel(k: String?): String? = k?.trim()?.takeIf { it.isNotEmpty() }?.replaceFirstChar { it.uppercaseChar() }
 
 @Serializable
 data class WhereState(val bashoId: String, val day: Int)
@@ -95,11 +106,14 @@ data class RikishiEntry(
     val bashoId: String,
     val day: Int,
     val div: String,
+    val oppId: Int,
     val opp: String,
     val won: Boolean,
     val rating: Int,
     val rank: String,
     val note: String?,
+    val kimarite: String?,
+    val tags: List<String>,
 )
 
 data class RikishiAggregate(

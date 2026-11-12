@@ -44,6 +44,7 @@ fun MenuScreen(
     bashoLabel: String,
     bashoList: List<BashoOption>,
     day: Int,
+    ratedDays: Set<Int>,
     isDark: Boolean,
     onClose: () -> Unit,
     onOpenTable: () -> Unit,
@@ -51,6 +52,8 @@ fun MenuScreen(
     onPickDay: (Int) -> Unit,
     onToggleTheme: () -> Unit,
     onExportCsv: () -> Unit,
+    onImportCsv: () -> Unit,
+    onOpenBest: () -> Unit,
     updater: AppUpdater,
 ) {
     val colors = LocalSumoColors.current
@@ -89,7 +92,9 @@ fun MenuScreen(
                 )
             }
 
-            BashoDayPicker(bashoLabel = bashoLabel, bashoList = bashoList, day = day, onPickBasho = onPickBasho, onPickDay = onPickDay)
+            MenuLinkRow("Best bouts", "Top rated →", onOpenBest)
+
+            BashoDayPicker(bashoLabel = bashoLabel, bashoList = bashoList, day = day, onPickBasho = onPickBasho, onPickDay = onPickDay, ratedDays = ratedDays)
 
             Row(
                 modifier = Modifier
@@ -116,6 +121,8 @@ fun MenuScreen(
                 Text("Export all ratings", style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = colors.ink))
                 Text("CSV →", style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.faint))
             }
+
+            MenuLinkRow("Import ratings", "CSV →", onImportCsv)
 
             UpdateRow(updater = updater)
 
@@ -145,5 +152,22 @@ private fun ThemeSwitch(isDark: Boolean) {
                 .clip(CircleShape)
                 .background(colors.ink),
         )
+    }
+}
+
+@Composable
+private fun MenuLinkRow(title: String, detail: String, onClick: () -> Unit) {
+    val colors = LocalSumoColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(BorderStroke(1.dp, colors.line))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 18.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = colors.ink))
+        Text(detail, style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.faint))
     }
 }
