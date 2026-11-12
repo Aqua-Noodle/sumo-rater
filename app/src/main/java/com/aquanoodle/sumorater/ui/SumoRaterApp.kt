@@ -31,6 +31,7 @@ import com.aquanoodle.sumorater.data.BashoOption
 import com.aquanoodle.sumorater.data.CsvImport
 import com.aquanoodle.sumorater.data.bestBouts
 import com.aquanoodle.sumorater.data.overviewRows
+import com.aquanoodle.sumorater.data.kimariteOptions
 import com.aquanoodle.sumorater.data.parseRatingsCsv
 import com.aquanoodle.sumorater.ui.screens.BestScreen
 import com.aquanoodle.sumorater.data.allRatingsCsv
@@ -213,15 +214,16 @@ fun SumoRaterApp() {
             )
 
             Screen.TABLE -> TableScreen(
-                rows = overviewRows(state.ratings, state.tableBasho, state.tableDiv, state.tableSort),
+                rows = overviewRows(state.ratings, state.tableFilter, state.tableSort),
                 photos = state.photos,
                 onBack = controller::openMenu,
                 onOpenDetail = controller::openDetail,
                 onExportCsv = { exportCsv(allRatingsFileName(), allRatingsCsv(state.ratings)) },
                 hasAnyRatings = state.ratings.values.any { it.hasScore },
+                matchingBouts = if (state.tableFilter.isActive) state.ratings.values.count { it.hasScore && state.tableFilter.matches(it) } else 0,
                 bashoOptions = state.ratings.values.map { it.bashoId }.distinct().sortedDescending().map { BashoOption(it, bashoLabel(it)) },
-                selectedBasho = state.tableBasho,
-                selectedDiv = state.tableDiv,
+                kimariteOptions = kimariteOptions(state.ratings),
+                filter = state.tableFilter,
                 sort = state.tableSort,
                 onFilter = controller::setTableFilter,
                 onSort = controller::setTableSort,
@@ -250,6 +252,9 @@ fun SumoRaterApp() {
                         onPhotoTap = { requestPhoto(aggregate.id) },
                         onEditEntry = { controller.editBout(it) },
                         onExportCsv = { exportCsv(rikishiFileName(aggregate.name), rikishiCsv(aggregate)) },
+                        matchingKeys = state.tableFilter.takeIf { it.isActive }?.let { f ->
+                            state.ratings.filterValues(f::matches).keys
+                        },
                     )
                 } else {
                     androidx.compose.runtime.LaunchedEffect(state.selected) { controller.openTable() }

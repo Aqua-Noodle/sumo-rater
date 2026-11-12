@@ -55,14 +55,55 @@ fun rankSortKey(rank: String): Int {
     return tier * 10_000 + num * 10 + side
 }
 
-/** The "My ratings" overview: averages over only the bouts matching the filters. */
+/**
+ * "My ratings" search. Basho/division narrow the scope; tags (all must be set), kimarite and
+ * the keyword narrow down to individual bouts. The keyword matches notes, wrestler names,
+ * kimarite and tags, case- and accent-insensitively.
+ */
+data class BoutFilter(
+    val bashoId: String? = null,
+    val div: String? = null,
+    val tags: Set<String> = emptySet(),
+    val kimarite: String? = null,
+    val query: String = "",
+) {
+    val isActive: Boolean get() = bashoId != null || div != null || tags.isNotEmpty() || kimarite != null || query.isNotBlank()
+
+    fun matches(r: Rating): Boolean {
+        if (bashoId != null && r.bashoId != bashoId) return false
+        if (div != null && r.div != div) return false
+        if (kimarite != null && !r.kimarite.equals(kimarite, ignoreCase = true)) return false
+        if (!r.tags.containsAll(tags)) return false
+        val words = fold(query).split(' ').filter { it.isNotBlank() }
+        if (words.isEmpty()) return true
+        val haystack = fold(
+            listOfNotNull(r.note, r.winnerName, r.loserName, r.kimarite).joinToString(" ") +
+                " " + r.tags.joinToString(" ")
+        )
+        return words.all { it in haystack }
+    }
+}
+
+/** Lowercase without diacritics, so "ryu" also finds "Ryū". */
+fun fold(s: String): String =
+    java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+        .lowercase(Locale.ROOT)
+
+/** Kimarite that appear in your ratings, most common first, for the filter dropdown. */
+fun kimariteOptions(ratings: Map<String, Rating>): List<String> =
+    ratings.values.mapNotNull { it.kimarite?.lowercase(Locale.ROOT)?.ifBlank { null } }
+        .groupingBy { it }.eachCount()
+        .entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+        .map { it.key }
+
+/** The "My ratings" overview: averages over only the bouts matching the filter. */
 fun overviewRows(
     ratings: Map<String, Rating>,
-    bashoId: String?,
-    div: String?,
+    filter: BoutFilter,
     sort: TableSort,
 ): List<RikishiAggregate> {
-    val filtered = ratings.filterValues { r -> (bashoId == null || r.bashoId == bashoId) && (div == null || r.div == div) }
+    val filtered = if (filter.isActive) ratings.filterValues(filter::matches) else ratings
     val rows = perRikishi(filtered).values
     return when (sort) {
         TableSort.SCORE -> rows.sortedWith(compareByDescending<RikishiAggregate> { it.avgN }.thenByDescending { it.count })

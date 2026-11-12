@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import com.aquanoodle.sumorater.data.TorikumiRow
 import com.aquanoodle.sumorater.data.BestScope
+import com.aquanoodle.sumorater.data.BoutFilter
 import com.aquanoodle.sumorater.data.QUICK_TAGS
 import com.aquanoodle.sumorater.data.TableSort
 import kotlinx.coroutines.async
@@ -316,8 +317,8 @@ class SumoController(private val repo: RatingsRepository) {
         state = state.copy(bestScope = scope)
     }
 
-    fun setTableFilter(bashoId: String?, div: String?) {
-        state = state.copy(tableBasho = bashoId, tableDiv = div)
+    fun setTableFilter(filter: BoutFilter) {
+        state = state.copy(tableFilter = filter)
     }
 
     fun setTableSort(sort: TableSort) {

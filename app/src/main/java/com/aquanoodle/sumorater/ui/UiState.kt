@@ -2,6 +2,7 @@ package com.aquanoodle.sumorater.ui
 
 import com.aquanoodle.sumorater.data.BestScope
 import com.aquanoodle.sumorater.data.Bout
+import com.aquanoodle.sumorater.data.BoutFilter
 import com.aquanoodle.sumorater.data.ChartMode
 import com.aquanoodle.sumorater.data.Rating
 import com.aquanoodle.sumorater.data.TableSort
@@ -26,9 +27,8 @@ data class UiState(
     val isDark: Boolean = false,
     val photos: Map<Int, String> = emptyMap(),
     val initialized: Boolean = false,
-    /** "My ratings" filters; null = all. */
-    val tableBasho: String? = null,
-    val tableDiv: String? = null,
+    /** "My ratings" search and filters. */
+    val tableFilter: BoutFilter = BoutFilter(),
     val tableSort: TableSort = TableSort.SCORE,
     val bestScope: BestScope = BestScope.BASHO,
 )

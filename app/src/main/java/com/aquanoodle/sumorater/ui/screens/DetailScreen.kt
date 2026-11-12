@@ -25,6 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -69,11 +70,17 @@ fun DetailScreen(
     onPhotoTap: () -> Unit,
     onEditEntry: (RikishiEntry) -> Unit,
     onExportCsv: () -> Unit,
+    /** Bouts matching the "My ratings" search, or null when no filter is set. */
+    matchingKeys: Set<String>? = null,
 ) {
     val colors = LocalSumoColors.current
+    // Coming from a filtered overview, start with just the bouts that matched.
+    var onlyMatching by remember(rikishi.id, matchingKeys) { mutableStateOf(matchingKeys != null) }
+    val matching = matchingKeys?.let { keys -> rikishi.list.filter { it.key in keys } }
+    val base = if (onlyMatching && matching != null) matching else rikishi.list
     // Head-to-head: when an opponent is picked, the bout list shows only bouts against them.
     var opponent by remember(rikishi.id) { mutableStateOf<Int?>(null) }
-    val shown = opponent?.let { id -> rikishi.list.filter { it.oppId == id } } ?: rikishi.list
+    val shown = opponent?.let { id -> base.filter { it.oppId == id } } ?: base
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -156,6 +163,28 @@ fun DetailScreen(
                     selected = opponent,
                     onSelect = { opponent = if (opponent == it) null else it },
                 )
+            }
+
+            if (matching != null) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            if (onlyMatching) "${matching.size} of ${rikishi.list.size} bouts match your filters"
+                            else "All ${rikishi.list.size} bouts",
+                            modifier = Modifier.weight(1f),
+                            style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = colors.mute, fontFeatureSettings = TabularNums),
+                        )
+                        TextButton(onClick = { onlyMatching = !onlyMatching }) {
+                            Text(
+                                if (onlyMatching) "Show all" else "Only matches",
+                                style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = colors.ink),
+                            )
+                        }
+                    }
+                }
             }
 
             item {
