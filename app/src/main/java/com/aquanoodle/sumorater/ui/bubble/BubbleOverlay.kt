@@ -25,6 +25,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import com.aquanoodle.sumorater.data.QUICK_TAGS
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -146,6 +152,9 @@ private fun RatingPanel(
     val isDone = state.bouts.isNotEmpty() && bout == null
     val canBack = state.idx > 0 && state.bouts.isNotEmpty()
     val shape = RoundedCornerShape(16.dp)
+    // Tag chips fold away so the panel stays small over a video.
+    var showTags by remember { mutableStateOf(false) }
+    val canTag = bout != null && bout.ratable
 
     val label = if (bout != null) {
         "${bout.div} · Day ${state.day} · ${state.idx + 1} / ${state.bouts.size}"
@@ -195,12 +204,21 @@ private fun RatingPanel(
             }
         }
 
+        if (canTag && showTags) TagChips(selected = state.tags, onToggle = controller::toggleTag)
+
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (canBack) FooterButton("← Back", bold = false, onClick = controller::back) else Spacer(Modifier.size(48.dp))
+            if (canTag) {
+                FooterButton(
+                    (if (state.tags.isEmpty()) "Tags" else "Tags · ${state.tags.size}") + if (showTags) " ▴" else " ▾",
+                    bold = false,
+                    onClick = { showTags = !showTags },
+                )
+            }
             if (bout != null) FooterButton("Next →", bold = true, onClick = controller::save)
         }
     }
@@ -263,6 +281,30 @@ private fun NameColumn(name: String, rank: String) {
             style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, lineHeight = 15.sp, color = colors.ink),
         )
         Text(rank, style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.04f.em, color = colors.mute))
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TagChips(selected: Set<String>, onToggle: (String) -> Unit) {
+    val colors = LocalSumoColors.current
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        QUICK_TAGS.forEach { tag ->
+            val on = tag in selected
+            Box(
+                modifier = Modifier
+                    .border(1.dp, if (on) colors.ink else colors.line)
+                    .background(if (on) colors.ink else colors.bg)
+                    .clickable { onToggle(tag) }
+                    .padding(horizontal = 9.dp, vertical = 6.dp),
+            ) {
+                Text(tag, style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = if (on) colors.bg else colors.ink))
+            }
+        }
     }
 }
 

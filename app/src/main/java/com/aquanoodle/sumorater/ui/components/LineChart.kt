@@ -5,6 +5,12 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
+import kotlin.math.sqrt
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -16,16 +22,40 @@ import com.aquanoodle.sumorater.data.ChartData
 import com.aquanoodle.sumorater.ui.theme.Archivo
 import com.aquanoodle.sumorater.ui.theme.LocalSumoColors
 
-/** 340x150 logical-unit line chart, matching the detail screen's SVG exactly. */
+/**
+ * 340x150 logical-unit line chart, matching the detail screen's SVG exactly.
+ * Tapping near a point reports its index through [onSelect]; [selected] is drawn highlighted.
+ */
 @Composable
-fun BoutLineChart(chart: ChartData, modifier: Modifier = Modifier) {
+fun BoutLineChart(
+    chart: ChartData,
+    modifier: Modifier = Modifier,
+    selected: Int? = null,
+    onSelect: ((Int) -> Unit)? = null,
+) {
     val colors = LocalSumoColors.current
     val textMeasurer = rememberTextMeasurer()
+    val latestOnSelect by rememberUpdatedState(onSelect)
+    val tapModifier = if (onSelect == null) Modifier else Modifier.pointerInput(chart) {
+        detectTapGestures { pos ->
+            val scale = size.width / 340f
+            val hit = chart.dots.withIndex().minByOrNull { (_, d) ->
+                val dx = d.x * scale - pos.x
+                val dy = d.y * scale - pos.y
+                dx * dx + dy * dy
+            } ?: return@detectTapGestures
+            val dx = hit.value.x * scale - pos.x
+            val dy = hit.value.y * scale - pos.y
+            // Generous radius: dots are small and fingers aren't.
+            if (sqrt(dx * dx + dy * dy) <= 28.dp.toPx()) latestOnSelect?.invoke(hit.index)
+        }
+    }
 
     Canvas(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(340f / 150f)
+            .then(tapModifier)
     ) {
         val scale = size.width / 340f
         fun px(v: Float) = v * scale
@@ -63,8 +93,20 @@ fun BoutLineChart(chart: ChartData, modifier: Modifier = Modifier) {
             )
         }
 
-        chart.dots.forEach { d ->
+        chart.dots.getOrNull(selected ?: -1)?.let { d ->
+            drawLine(
+                color = colors.faint,
+                start = Offset(px(d.x), px(10f)),
+                end = Offset(px(d.x), px(130f)),
+                strokeWidth = px(1f),
+            )
+        }
+
+        chart.dots.forEachIndexed { i, d ->
             val center = Offset(px(d.x), px(d.y))
+            if (i == selected) {
+                drawCircle(color = colors.ink, radius = px(7f), center = center, style = Stroke(width = px(1.5f)))
+            }
             val fill = if (d.won == false) colors.ink else colors.bg
             drawCircle(color = fill, radius = px(3.5f), center = center)
             drawCircle(color = colors.ink, radius = px(3.5f), center = center, style = Stroke(width = px(1.5f)))

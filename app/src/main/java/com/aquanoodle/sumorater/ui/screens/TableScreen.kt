@@ -32,8 +32,6 @@ import com.aquanoodle.sumorater.data.TableSort
 import com.aquanoodle.sumorater.data.BoutFilter
 import com.aquanoodle.sumorater.data.QUICK_TAGS
 import com.aquanoodle.sumorater.data.kimariteLabel
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -211,7 +209,6 @@ fun TableScreen(
 }
 
 /** Keyword search, basho/kimarite/division/tag filters and sort order; averages cover only matching bouts. */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FilterBar(
     bashoOptions: List<BashoOption>,
@@ -257,17 +254,23 @@ private fun FilterBar(
             },
         )
 
+        Dropdown(
+            label = bashoOptions.firstOrNull { it.id == filter.bashoId }?.label ?: "All basho",
+            options = listOf<Pair<String?, String>>(null to "All basho") + bashoOptions.map { it.id to it.label },
+            onSelect = { onFilter(filter.copy(bashoId = it)) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Dropdown(
-                label = bashoOptions.firstOrNull { it.id == filter.bashoId }?.label ?: "All basho",
-                options = listOf<Pair<String?, String>>(null to "All basho") + bashoOptions.map { it.id to it.label },
-                onSelect = { onFilter(filter.copy(bashoId = it)) },
-                modifier = Modifier.weight(1f),
-            )
             Dropdown(
                 label = kimariteLabel(filter.kimarite) ?: "Any kimarite",
                 options = listOf<Pair<String?, String>>(null to "Any kimarite") + kimariteOptions.map { it to (kimariteLabel(it) ?: it) },
                 onSelect = { onFilter(filter.copy(kimarite = it)) },
+                modifier = Modifier.weight(1f),
+            )
+            TagDropdown(
+                selected = filter.tags,
+                onChange = { onFilter(filter.copy(tags = it)) },
                 modifier = Modifier.weight(1f),
             )
         }
@@ -277,24 +280,6 @@ private fun FilterBar(
             selected = filter.div,
             onSelect = { onFilter(filter.copy(div = it)) },
         )
-
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            QUICK_TAGS.forEach { tag ->
-                val on = tag in filter.tags
-                Box(
-                    modifier = Modifier
-                        .border(1.dp, if (on) colors.ink else colors.line)
-                        .background(if (on) colors.ink else colors.bg)
-                        .clickable { onFilter(filter.copy(tags = if (on) filter.tags - tag else filter.tags + tag)) }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                    Text(tag, style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = if (on) colors.bg else colors.ink))
-                }
-            }
-        }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -311,28 +296,66 @@ private fun FilterBar(
     }
 }
 
+/** Multi-select: the menu stays open so several tags can be ticked in one go. */
 @Composable
-private fun <T> Dropdown(label: String, options: List<Pair<T, String>>, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
+private fun TagDropdown(selected: Set<String>, onChange: (Set<String>) -> Unit, modifier: Modifier = Modifier) {
     val colors = LocalSumoColors.current
     var open by remember { mutableStateOf(false) }
+    val label = when (selected.size) {
+        0 -> "Any tag"
+        1 -> selected.first()
+        else -> "${selected.size} tags"
+    }
     Box(modifier = modifier) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, colors.ink)
-                .clickable { open = true }
-                .padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                label,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = colors.ink),
-            )
-            Text("▾", style = TextStyle(fontFamily = Archivo, fontSize = 14.sp, color = colors.ink))
+        DropdownButton(label = label, onClick = { open = true })
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            QUICK_TAGS.forEach { tag ->
+                val on = tag in selected
+                DropdownMenuItem(
+                    text = { Text(tag) },
+                    leadingIcon = {
+                        Text(if (on) "☑" else "☐", style = TextStyle(fontSize = 18.sp, color = colors.ink))
+                    },
+                    onClick = { onChange(if (on) selected - tag else selected + tag) },
+                )
+            }
+            if (selected.isNotEmpty()) {
+                DropdownMenuItem(
+                    text = { Text("Clear tags", color = colors.mute) },
+                    onClick = { open = false; onChange(emptySet()) },
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun DropdownButton(label: String, onClick: () -> Unit) {
+    val colors = LocalSumoColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, colors.ink)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = colors.ink),
+        )
+        Text("▾", style = TextStyle(fontFamily = Archivo, fontSize = 14.sp, color = colors.ink))
+    }
+}
+
+@Composable
+private fun <T> Dropdown(label: String, options: List<Pair<T, String>>, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
+    var open by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        DropdownButton(label = label, onClick = { open = true })
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             options.forEach { (value, text) ->
                 DropdownMenuItem(text = { Text(text) }, onClick = { open = false; onSelect(value) })

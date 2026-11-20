@@ -50,6 +50,7 @@ fun BestScreen(
     onScope: (BestScope) -> Unit,
     onBack: () -> Unit,
     onOpenBout: (key: String, rating: Rating) -> Unit,
+    onOpenRikishi: (Int) -> Unit,
 ) {
     val colors = LocalSumoColors.current
     Column(
@@ -111,7 +112,7 @@ fun BestScreen(
         } else {
             LazyColumn(modifier = Modifier.weight(1f).padding(top = 8.dp)) {
                 itemsIndexed(bouts.take(100), key = { _, b -> b.first }) { i, (key, r) ->
-                    BestRow(rank = i + 1, r = r, onClick = { onOpenBout(key, r) })
+                    BestRow(rank = i + 1, r = r, onClick = { onOpenBout(key, r) }, onOpenRikishi = onOpenRikishi)
                 }
             }
         }
@@ -119,7 +120,7 @@ fun BestScreen(
 }
 
 @Composable
-private fun BestRow(rank: Int, r: Rating, onClick: () -> Unit) {
+private fun BestRow(rank: Int, r: Rating, onClick: () -> Unit, onOpenRikishi: (Int) -> Unit) {
     val colors = LocalSumoColors.current
     Row(
         modifier = Modifier
@@ -136,10 +137,13 @@ private fun BestRow(rank: Int, r: Rating, onClick: () -> Unit) {
             style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.faint, fontFeatureSettings = TabularNums),
         )
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                "${r.winnerName} def. ${r.loserName}",
-                style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = colors.ink),
-            )
+            // Each name opens that wrestler's page; the rest of the row opens the bout.
+            val nameStyle = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = colors.ink)
+            Row {
+                Text(r.winnerName, modifier = Modifier.clickable { onOpenRikishi(r.winnerId) }, style = nameStyle)
+                Text(" def. ", style = nameStyle.copy(fontWeight = FontWeight.Normal, color = colors.mute))
+                Text(r.loserName, modifier = Modifier.clickable { onOpenRikishi(r.loserId) }, style = nameStyle)
+            }
             val details = listOfNotNull("${bashoLabel(r.bashoId)} · Day ${r.day}", r.div, kimariteLabel(r.kimarite)) + r.tags
             Text(
                 details.joinToString(" · "),

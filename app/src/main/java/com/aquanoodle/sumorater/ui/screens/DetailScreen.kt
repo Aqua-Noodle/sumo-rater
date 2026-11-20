@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -70,6 +71,7 @@ fun DetailScreen(
     onPhotoTap: () -> Unit,
     onEditEntry: (RikishiEntry) -> Unit,
     onExportCsv: () -> Unit,
+    onOpenRikishi: (Int) -> Unit,
     /** Bouts matching the "My ratings" search, or null when no filter is set. */
     matchingKeys: Set<String>? = null,
 ) {
@@ -80,6 +82,8 @@ fun DetailScreen(
     val base = if (onlyMatching && matching != null) matching else rikishi.list
     // Head-to-head: when an opponent is picked, the bout list shows only bouts against them.
     var opponent by remember(rikishi.id) { mutableStateOf<Int?>(null) }
+    // Point tapped in the line chart (index into the chart's points).
+    var picked by remember(rikishi.id, mode) { mutableStateOf<Int?>(null) }
     val shown = opponent?.let { id -> base.filter { it.oppId == id } } ?: base
     Column(
         modifier = Modifier
@@ -151,11 +155,21 @@ fun DetailScreen(
 
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 8.dp)) {
-                    BoutLineChart(chart = chart)
+                    BoutLineChart(chart = chart, selected = picked, onSelect = { picked = if (picked == it) null else it })
                 }
             }
 
-            item { StatsBlock(rikishi.list) }
+            item {
+                ChartPick(
+                    list = rikishi.list,
+                    mode = mode,
+                    index = picked,
+                    onEdit = onEditEntry,
+                    onOpenRikishi = onOpenRikishi,
+                )
+            }
+
+            item { RatingDistribution(rikishi.list) }
 
             item {
                 HeadToHead(
@@ -196,7 +210,7 @@ fun DetailScreen(
             }
 
             items(shown.reversed(), key = { it.key }) { entry ->
-                RatingRow(entry, onClick = { onEditEntry(entry) })
+                RatingRow(entry, onClick = { onEditEntry(entry) }, onOpponentTap = { onOpenRikishi(entry.oppId) })
             }
         }
     }
@@ -238,7 +252,7 @@ fun ExportCsvButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun RatingRow(entry: RikishiEntry, onClick: () -> Unit) {
+private fun RatingRow(entry: RikishiEntry, onClick: () -> Unit, onOpponentTap: () -> Unit) {
     val colors = LocalSumoColors.current
     val bg = if (entry.won) WinRowBg else LossRowBg
     val fg = if (entry.won) WinRowFg else LossRowFg
@@ -255,7 +269,11 @@ private fun RatingRow(entry: RikishiEntry, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text("vs ${entry.opp}", style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = fg))
+            Text(
+                "vs ${entry.opp}",
+                modifier = Modifier.clickable(onClick = onOpponentTap),
+                style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = fg),
+            )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 "${bashoLabel(entry.bashoId)} · Day ${entry.day}",
@@ -290,32 +308,86 @@ private fun RatingRow(entry: RikishiEntry, onClick: () -> Unit) {
     }
 }
 
-/** Record and best/worst bouts within the bouts you've rated. */
+/** The bout (or basho average) behind the tapped chart point; a hint until one is tapped. */
 @Composable
-private fun StatsBlock(list: List<RikishiEntry>) {
+private fun ChartPick(
+    list: List<RikishiEntry>,
+    mode: ChartMode,
+    index: Int?,
+    onEdit: (RikishiEntry) -> Unit,
+    onOpenRikishi: (Int) -> Unit,
+) {
     val colors = LocalSumoColors.current
-    if (list.isEmpty()) return
-    val wins = list.count { it.won }
-    val best = list.maxBy { it.rating }
-    val worst = list.minBy { it.rating }
-    fun line(e: RikishiEntry) = "${e.rating} vs ${e.opp} · ${bashoLabel(e.bashoId)} d${e.day}"
-    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp)) {
-        StatLine("Record in rated bouts", "$wins–${list.size - wins}")
-        StatLine("Best", line(best))
-        if (list.size > 1) StatLine("Worst", line(worst))
+    val hintStyle = TextStyle(fontFamily = Archivo, fontSize = 11.sp, color = colors.faint)
+    if (index == null) {
+        Text("Tap a point to see that bout.", modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 4.dp), style = hintStyle)
+        return
+    }
+    if (mode == ChartMode.DAY) {
+        val entry = list.getOrNull(index) ?: return
+        Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).border(1.dp, colors.ink)) {
+            RatingRow(entry, onClick = { onEdit(entry) }, onOpponentTap = { onOpenRikishi(entry.oppId) })
+        }
+    } else {
+        // Same grouping and order as buildChart's basho mode.
+        val (bashoId, bouts) = list.groupBy { it.bashoId }.toSortedMap().entries.toList().getOrNull(index) ?: return
+        val wins = bouts.count { it.won }
+        val avg = String.format(java.util.Locale.US, "%.1f", bouts.map { it.rating }.average())
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .border(1.dp, colors.ink)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(bashoLabel(bashoId), style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = colors.ink))
+                Text(
+                    "${bouts.size} rated bout${if (bouts.size == 1) "" else "s"} · $wins–${bouts.size - wins}",
+                    style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, color = colors.mute, fontFeatureSettings = TabularNums),
+                )
+            }
+            Text(avg, style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, color = colors.ink, fontFeatureSettings = TabularNums))
+        }
     }
 }
 
+/** How often each score was given: ratings 0–10 on the vertical axis (10 on top), bar length = bouts. */
 @Composable
-private fun StatLine(label: String, value: String) {
+private fun RatingDistribution(list: List<RikishiEntry>) {
     val colors = LocalSumoColors.current
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+    if (list.isEmpty()) return
+    val counts = IntArray(11)
+    list.forEach { counts[it.rating.coerceIn(0, 10)]++ }
+    val max = counts.max().coerceAtLeast(1)
+    val small = TextStyle(fontFamily = Archivo, fontSize = 11.sp, color = colors.faint, fontFeatureSettings = TabularNums)
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp)) {
         Text(
-            label.uppercase(),
-            modifier = Modifier.width(150.dp),
+            "RATING DISTRIBUTION",
             style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.14f.em, color = colors.faint),
         )
-        Text(value, style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.ink, fontFeatureSettings = TabularNums))
+        Spacer(modifier = Modifier.height(8.dp))
+        (10 downTo 0).forEach { v ->
+            val n = counts[v]
+            Row(modifier = Modifier.fillMaxWidth().height(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("$v", modifier = Modifier.width(22.dp), textAlign = TextAlign.End, style = small)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(start = 8.dp)
+                        // y axis
+                        .drawBehind { drawLine(colors.line, Offset(0f, 0f), Offset(0f, size.height), strokeWidth = 1.dp.toPx()) }
+                        .padding(vertical = 3.dp),
+                ) {
+                    if (n > 0) {
+                        Box(modifier = Modifier.fillMaxWidth(n.toFloat() / max).fillMaxHeight().background(colors.ink))
+                    }
+                }
+                Text(if (n > 0) "$n" else "", modifier = Modifier.width(30.dp), textAlign = TextAlign.End, style = small)
+            }
+        }
     }
 }
 

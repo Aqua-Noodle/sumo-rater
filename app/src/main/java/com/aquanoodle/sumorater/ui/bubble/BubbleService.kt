@@ -181,7 +181,7 @@ class BubbleService : Service() {
         private const val ACTION_STOP = "com.aquanoodle.sumorater.STOP_BUBBLE"
         const val BUBBLE_DP = 56
         const val PANEL_WIDTH_DP = 340
-        private const val PANEL_HEIGHT_ESTIMATE_DP = 260
+        private const val PANEL_HEIGHT_ESTIMATE_DP = 300
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, BubbleService::class.java))

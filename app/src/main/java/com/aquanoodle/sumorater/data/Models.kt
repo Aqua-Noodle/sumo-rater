@@ -90,7 +90,7 @@ data class Rating(
 }
 
 /** One-tap labels offered under every ratable bout, in display order. */
-val QUICK_TAGS = listOf("Great tachiai", "Long bout", "Close call", "Upset", "Henka", "Matta", "Monoii")
+val QUICK_TAGS = listOf("Great tachiai", "Long bout", "Close call", "Upset", "Henka", "Matta", "Monoii", "Injury", "Possible injury")
 
 /** "yorikiri" -> "Yorikiri" */
 fun kimariteLabel(k: String?): String? = k?.trim()?.takeIf { it.isNotEmpty() }?.replaceFirstChar { it.uppercaseChar() }

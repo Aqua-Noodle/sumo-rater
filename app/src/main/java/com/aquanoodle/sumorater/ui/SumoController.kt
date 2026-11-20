@@ -94,6 +94,7 @@ class SumoController(private val repo: RatingsRepository) {
 
     /** User confirmed the basho/day shown on the Start screen; begin rating. */
     fun enterRate() {
+        record(Screen.RATE)
         state = state.copy(screen = Screen.RATE)
         loadDay()
     }
@@ -305,11 +306,13 @@ class SumoController(private val repo: RatingsRepository) {
     fun editBout(entry: RikishiEntry) = editBout(entry.key, entry.bashoId, entry.day)
 
     fun editBout(key: String, bashoId: String, day: Int) {
+        record(Screen.RATE, push = true)
         state = state.copy(bashoId = bashoId, day = day, screen = Screen.RATE, bouts = emptyList(), idx = 0)
         loadDay(jumpKey = key)
     }
 
     fun openBest() {
+        record(Screen.BEST)
         state = state.copy(screen = Screen.BEST)
     }
 
@@ -354,20 +357,53 @@ class SumoController(private val repo: RatingsRepository) {
     }
 
     fun openMenu() {
+        record(Screen.MENU)
         state = state.copy(screen = Screen.MENU)
     }
 
     fun openTable() {
+        record(Screen.TABLE)
         state = state.copy(screen = Screen.TABLE)
     }
 
-    fun openRate() {
-        state = state.copy(screen = Screen.RATE)
-        loadBout()
+    fun openDetail(rikishiId: Int) {
+        record(Screen.DETAIL, selected = rikishiId)
+        state = state.copy(screen = Screen.DETAIL, selected = rikishiId)
     }
 
-    fun openDetail(rikishiId: Int) {
-        state = state.copy(screen = Screen.DETAIL, selected = rikishiId)
+    // Screen history, so the back button / edge swipe goes one step back instead of closing the app.
+    private data class NavEntry(val screen: Screen, val selected: Int?)
+
+    private val history = ArrayList<NavEntry>()
+
+    private fun entryOf(screen: Screen, selected: Int?) = NavEntry(screen, if (screen == Screen.DETAIL) selected else null)
+
+    /**
+     * Notes the move from the current screen to [screen]. Going to a screen already in the
+     * history unwinds back to it (menu → pick a day → rating doesn't pile up); [push] always
+     * stacks, for drill-downs like editing a bout from a wrestler page.
+     */
+    private fun record(screen: Screen, selected: Int? = state.selected, push: Boolean = false) {
+        val current = entryOf(state.screen, state.selected)
+        val target = entryOf(screen, selected)
+        if (current == target) return
+        val at = if (push) -1 else history.indexOfLast { it == target }
+        if (at >= 0) {
+            while (history.size > at) history.removeAt(history.size - 1)
+        } else {
+            history.add(current)
+            if (history.size > 40) history.removeAt(0)
+        }
+    }
+
+    /** The screen that back would return to. */
+    fun previousScreen(): Screen? = history.lastOrNull()?.screen
+
+    /** One step back; the start screen is the root, where back leaves the app as usual. */
+    fun navigateBack() {
+        val prev = if (history.isEmpty()) entryOf(Screen.START, null) else history.removeAt(history.size - 1)
+        state = state.copy(screen = prev.screen, selected = prev.selected ?: state.selected)
+        if (prev.screen == Screen.RATE && state.bouts.isEmpty() && !state.loading) loadDay()
     }
 
     fun pickBasho(bashoId: String) = go(bashoId = bashoId, day = 1)
@@ -375,6 +411,7 @@ class SumoController(private val repo: RatingsRepository) {
     fun pickDay(day: Int) = go(day = day)
 
     private fun go(bashoId: String = state.bashoId, day: Int) {
+        record(Screen.RATE)
         state = state.copy(bashoId = bashoId, day = day, screen = Screen.RATE, bouts = emptyList(), idx = 0)
         loadDay()
     }

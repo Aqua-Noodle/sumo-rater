@@ -56,8 +56,9 @@ fun rankSortKey(rank: String): Int {
 }
 
 /**
- * "My ratings" search. Basho/division narrow the scope; tags (all must be set), kimarite and
- * the keyword narrow down to individual bouts. The keyword matches notes, wrestler names,
+ * "My ratings" search. Basho narrows the scope and division picks wrestlers by their current
+ * rank (see [overviewRows]); tags (all must be set), kimarite and the keyword narrow down to
+ * individual bouts. The keyword matches notes, wrestler names,
  * kimarite and tags, case- and accent-insensitively.
  */
 data class BoutFilter(
@@ -71,7 +72,6 @@ data class BoutFilter(
 
     fun matches(r: Rating): Boolean {
         if (bashoId != null && r.bashoId != bashoId) return false
-        if (div != null && r.div != div) return false
         if (kimarite != null && !r.kimarite.equals(kimarite, ignoreCase = true)) return false
         if (!r.tags.containsAll(tags)) return false
         val words = fold(query).split(' ').filter { it.isNotBlank() }
@@ -97,14 +97,38 @@ fun kimariteOptions(ratings: Map<String, Rating>): List<String> =
         .entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
         .map { it.key }
 
-/** The "My ratings" overview: averages over only the bouts matching the filter. */
+/** "M4e" -> Makuuchi, "J3w" -> Juryo; null for lower divisions or unknown ranks. */
+fun rankDivision(rank: String): String? {
+    val m = SHORT_RANK.find(rank) ?: return null
+    return when (m.groupValues[1]) {
+        "Y", "O", "S", "K", "M" -> "Makuuchi"
+        "J" -> "Juryo"
+        else -> null
+    }
+}
+
+/**
+ * The "My ratings" overview: averages over only the bouts matching the filter.
+ *
+ * Division goes by the wrestler's rank in the selected basho, or their latest rated bout when
+ * all basho are shown, so a Juryo wrestler who once was (or filled in) in Makuuchi doesn't
+ * show up under Makuuchi. The row's rank is that same current rank.
+ */
 fun overviewRows(
     ratings: Map<String, Rating>,
     filter: BoutFilter,
     sort: TableSort,
 ): List<RikishiAggregate> {
+    val inScope = if (filter.bashoId == null) ratings else ratings.filterValues { it.bashoId == filter.bashoId }
+    val current = perRikishi(inScope).mapValues { (_, agg) ->
+        val latest = agg.list.last()
+        latest.rank to (rankDivision(latest.rank) ?: latest.div)
+    }
     val filtered = if (filter.isActive) ratings.filterValues(filter::matches) else ratings
-    val rows = perRikishi(filtered).values
+    val rows = perRikishi(filtered).values.mapNotNull { row ->
+        val (rank, division) = current[row.id] ?: return@mapNotNull null
+        if (filter.div != null && division != filter.div) null else row.copy(rank = rank)
+    }
     return when (sort) {
         TableSort.SCORE -> rows.sortedWith(compareByDescending<RikishiAggregate> { it.avgN }.thenByDescending { it.count })
         TableSort.RANK -> rows.sortedWith(compareBy<RikishiAggregate> { rankSortKey(it.rank) }.thenBy { it.name })

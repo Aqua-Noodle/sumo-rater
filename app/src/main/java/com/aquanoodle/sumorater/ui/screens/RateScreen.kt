@@ -120,6 +120,8 @@ fun RateScreen(
     onRestartDay: () -> Unit,
     onPhotoTap: (Int) -> Unit,
     onOpenBubble: () -> Unit,
+    ratedIds: Set<Int> = emptySet(),
+    onOpenRikishi: (Int) -> Unit = {},
 ) {
     val colors = LocalSumoColors.current
     val bout = bouts.getOrNull(idx)
@@ -201,6 +203,8 @@ fun RateScreen(
                         onWestSettled = onWestSettled,
                         onNoteChange = onNoteChange,
                         onPhotoTap = onPhotoTap,
+                        ratedIds = ratedIds,
+                        onOpenRikishi = onOpenRikishi,
                     )
                     isDone -> DoneState(
                         bashoLabel = bashoLabel,
@@ -444,6 +448,8 @@ private fun BoutCard(
     onNoteChange: (String) -> Unit,
     onToggleTag: (String) -> Unit,
     onPhotoTap: (Int) -> Unit,
+    ratedIds: Set<Int>,
+    onOpenRikishi: (Int) -> Unit,
 ) {
     val colors = LocalSumoColors.current
     Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp)) {
@@ -456,7 +462,11 @@ private fun BoutCard(
                 // with that same height explicitly.
                 verticalAlignment = Alignment.Top,
             ) {
-                RikishiColumn(name = bout.eastName, rank = bout.eastRank, photoPath = photos[bout.eastId], onPhotoTap = { onPhotoTap(bout.eastId) })
+                RikishiColumn(
+                    name = bout.eastName, rank = bout.eastRank, photoPath = photos[bout.eastId],
+                    onPhotoTap = { onPhotoTap(bout.eastId) },
+                    onNameTap = if (bout.eastId in ratedIds) ({ onOpenRikishi(bout.eastId) }) else null,
+                )
 
                 val reason = bout.unratableReason
                 if (reason == null) {
@@ -494,7 +504,11 @@ private fun BoutCard(
                     UnratableMiddle(reason)
                 }
 
-                RikishiColumn(name = bout.westName, rank = bout.westRank, photoPath = photos[bout.westId], onPhotoTap = { onPhotoTap(bout.westId) })
+                RikishiColumn(
+                    name = bout.westName, rank = bout.westRank, photoPath = photos[bout.westId],
+                    onPhotoTap = { onPhotoTap(bout.westId) },
+                    onNameTap = if (bout.westId in ratedIds) ({ onOpenRikishi(bout.westId) }) else null,
+                )
             }
         }
 
@@ -621,7 +635,7 @@ private fun NotesSection(note: String, onNoteChange: (String) -> Unit, modifier:
 }
 
 @Composable
-private fun RikishiColumn(name: String, rank: String, photoPath: String?, onPhotoTap: () -> Unit) {
+private fun RikishiColumn(name: String, rank: String, photoPath: String?, onPhotoTap: () -> Unit, onNameTap: (() -> Unit)?) {
     val colors = LocalSumoColors.current
     Column(
         modifier = Modifier
@@ -635,8 +649,10 @@ private fun RikishiColumn(name: String, rank: String, photoPath: String?, onPhot
             modifier = Modifier.size(width = 92.dp, height = PHOTO_HEIGHT_DP.dp),
         )
         Spacer(modifier = Modifier.height(8.dp))
+        // Tapping the name opens the wrestler's page (only once they have rated bouts).
         Text(
             text = name,
+            modifier = if (onNameTap != null) Modifier.clickable(onClick = onNameTap) else Modifier,
             textAlign = TextAlign.Center,
             style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 16.sp, color = colors.ink),
         )

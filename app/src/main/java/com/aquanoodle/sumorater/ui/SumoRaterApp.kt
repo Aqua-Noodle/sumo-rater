@@ -1,6 +1,7 @@
 package com.aquanoodle.sumorater.ui
 
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -154,6 +155,12 @@ fun SumoRaterApp() {
             return@SumoRaterTheme
         }
 
+        // Edge swipe / back button: one step back through the app instead of leaving it.
+        BackHandler(enabled = state.screen != Screen.START) { controller.navigateBack() }
+
+        // Wrestlers with a page to open (at least one rated bout).
+        val ratedIds = remember(state.ratings) { controller.perRikishiMap().keys }
+
         when (state.screen) {
             Screen.START -> StartScreen(
                 bashoLabel = bashoLabel(state.bashoId),
@@ -193,6 +200,8 @@ fun SumoRaterApp() {
                 onRestartDay = { controller.jumpTo(0) },
                 onPhotoTap = requestPhoto,
                 onOpenBubble = openBubble,
+                ratedIds = ratedIds,
+                onOpenRikishi = { if (it in ratedIds) controller.openDetail(it) },
             )
 
             Screen.MENU -> MenuScreen(
@@ -201,7 +210,7 @@ fun SumoRaterApp() {
                 bashoList = remember { bashoList() },
                 day = state.day,
                 isDark = state.isDark,
-                onClose = controller::openRate,
+                onClose = controller::navigateBack,
                 onOpenTable = controller::openTable,
                 onPickBasho = controller::pickBasho,
                 onPickDay = controller::pickDay,
@@ -213,21 +222,24 @@ fun SumoRaterApp() {
                 updater = updater,
             )
 
-            Screen.TABLE -> TableScreen(
-                rows = overviewRows(state.ratings, state.tableFilter, state.tableSort),
+            Screen.TABLE -> {
+              val rows = overviewRows(state.ratings, state.tableFilter, state.tableSort)
+              TableScreen(
+                rows = rows,
                 photos = state.photos,
-                onBack = controller::openMenu,
+                onBack = controller::navigateBack,
                 onOpenDetail = controller::openDetail,
                 onExportCsv = { exportCsv(allRatingsFileName(), allRatingsCsv(state.ratings)) },
                 hasAnyRatings = state.ratings.values.any { it.hasScore },
-                matchingBouts = if (state.tableFilter.isActive) state.ratings.values.count { it.hasScore && state.tableFilter.matches(it) } else 0,
+                matchingBouts = rows.flatMap { row -> row.list.map { it.key } }.toSet().size,
                 bashoOptions = state.ratings.values.map { it.bashoId }.distinct().sortedDescending().map { BashoOption(it, bashoLabel(it)) },
                 kimariteOptions = kimariteOptions(state.ratings),
                 filter = state.tableFilter,
                 sort = state.tableSort,
                 onFilter = controller::setTableFilter,
                 onSort = controller::setTableSort,
-            )
+              )
+            }
 
             Screen.BEST -> BestScreen(
                 bouts = bestBouts(state.ratings, state.bestScope, state.bashoId, state.day),
@@ -235,7 +247,8 @@ fun SumoRaterApp() {
                 bashoLabel = bashoLabel(state.bashoId),
                 day = state.day,
                 onScope = controller::setBestScope,
-                onBack = controller::openMenu,
+                onBack = controller::navigateBack,
+                onOpenRikishi = { if (it in ratedIds) controller.openDetail(it) },
                 onOpenBout = { key, r -> controller.editBout(key, r.bashoId, r.day) },
             )
 
@@ -247,17 +260,19 @@ fun SumoRaterApp() {
                         photoPath = state.photos[aggregate.id],
                         chart = controller.chartFor(aggregate),
                         mode = state.mode,
-                        onBack = controller::openTable,
+                        onBack = controller::navigateBack,
+                        onOpenRikishi = { if (it in ratedIds) controller.openDetail(it) },
                         onModeChange = controller::setMode,
                         onPhotoTap = { requestPhoto(aggregate.id) },
                         onEditEntry = { controller.editBout(it) },
                         onExportCsv = { exportCsv(rikishiFileName(aggregate.name), rikishiCsv(aggregate)) },
-                        matchingKeys = state.tableFilter.takeIf { it.isActive }?.let { f ->
+                        // Only when opened from the filtered list, not e.g. by tapping a name while rating.
+                        matchingKeys = state.tableFilter.takeIf { it.isActive && controller.previousScreen() == Screen.TABLE }?.let { f ->
                             state.ratings.filterValues(f::matches).keys
                         },
                     )
                 } else {
-                    androidx.compose.runtime.LaunchedEffect(state.selected) { controller.openTable() }
+                    androidx.compose.runtime.LaunchedEffect(state.selected) { controller.navigateBack() }
                 }
             }
         }
