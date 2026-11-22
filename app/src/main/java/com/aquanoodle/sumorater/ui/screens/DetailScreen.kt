@@ -497,7 +497,7 @@ private fun TagChart(list: List<RikishiEntry>) {
     }
 }
 
-/** Strength of schedule: sum of the opponents' average scores over the bouts in scope. */
+/** Strength of schedule: the average, over the bouts in scope, of each opponent's average score. */
 @Composable
 private fun ScheduleBlock(schedule: Schedule, scope: String) {
     val colors = LocalSumoColors.current
@@ -510,12 +510,12 @@ private fun ScheduleBlock(schedule: Schedule, scope: String) {
         )
         Row(modifier = Modifier.padding(top = 6.dp), verticalAlignment = Alignment.Bottom) {
             Text(
-                fmt(schedule.sum),
+                fmt(schedule.perBout),
                 style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 28.sp, letterSpacing = (-0.02f).em, color = colors.ink, fontFeatureSettings = TabularNums),
             )
             Text(
                 buildString {
-                    append("${schedule.counted} bout${if (schedule.counted == 1) "" else "s"} · avg opponent ${fmt(schedule.perBout)}")
+                    append("avg opponent score over ${schedule.counted} bout${if (schedule.counted == 1) "" else "s"}")
                     if (schedule.skipped > 0) append(" · ${schedule.skipped} unrated opponent${if (schedule.skipped == 1) "" else "s"} left out")
                 },
                 modifier = Modifier.padding(start = 12.dp, bottom = 5.dp),
