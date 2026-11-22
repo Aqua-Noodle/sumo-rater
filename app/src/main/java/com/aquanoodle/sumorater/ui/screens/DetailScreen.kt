@@ -1,5 +1,10 @@
 package com.aquanoodle.sumorater.ui.screens
 
+import com.aquanoodle.sumorater.data.buildChart
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.foundation.Canvas
 import com.aquanoodle.sumorater.data.dayLabel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,8 +34,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,7 +50,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.aquanoodle.sumorater.data.ChartData
 import com.aquanoodle.sumorater.data.ChartMode
 import com.aquanoodle.sumorater.data.RikishiAggregate
 import com.aquanoodle.sumorater.data.RikishiEntry
@@ -66,7 +68,6 @@ import com.aquanoodle.sumorater.ui.theme.WinRowFg
 fun DetailScreen(
     rikishi: RikishiAggregate,
     photoPath: String?,
-    chart: ChartData,
     mode: ChartMode,
     onBack: () -> Unit,
     onModeChange: (ChartMode) -> Unit,
@@ -76,17 +77,22 @@ fun DetailScreen(
     onOpenRikishi: (Int) -> Unit,
     /** Bouts matching the "My ratings" search, or null when no filter is set. */
     matchingKeys: Set<String>? = null,
+    showOpponents: Boolean = false,
+    onToggleOpponents: () -> Unit = {},
 ) {
     val colors = LocalSumoColors.current
     // Coming from a filtered overview, start with just the bouts that matched.
     var onlyMatching by remember(rikishi.id, matchingKeys) { mutableStateOf(matchingKeys != null) }
     val matching = matchingKeys?.let { keys -> rikishi.list.filter { it.key in keys } }
     val base = if (onlyMatching && matching != null) matching else rikishi.list
-    // Head-to-head: when an opponent is picked, the bout list shows only bouts against them.
-    var opponent by remember(rikishi.id) { mutableStateOf<Int?>(null) }
+    val shown = base
+    // Days view can be narrowed to one basho (null = all).
+    var chartBasho by remember(rikishi.id) { mutableStateOf<String?>(null) }
+    val bashoIds = remember(rikishi.list) { rikishi.list.map { it.bashoId }.distinct().sortedDescending() }
+    val chartList = if (mode == ChartMode.DAY && chartBasho != null) rikishi.list.filter { it.bashoId == chartBasho } else rikishi.list
+    val chart = remember(chartList, mode) { buildChart(chartList, mode) }
     // Point tapped in the line chart (index into the chart's points).
-    var picked by remember(rikishi.id, mode) { mutableStateOf<Int?>(null) }
-    val shown = opponent?.let { id -> base.filter { it.oppId == id } } ?: base
+    var picked by remember(rikishi.id, mode, chartBasho) { mutableStateOf<Int?>(null) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -156,14 +162,39 @@ fun DetailScreen(
             }
 
             item {
-                Box(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 8.dp)) {
-                    BoutLineChart(chart = chart, selected = picked, onSelect = { picked = if (picked == it) null else it })
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (mode == ChartMode.DAY && bashoIds.size > 1) {
+                        ChartBashoPicker(bashoIds = bashoIds, selected = chartBasho, onPick = { chartBasho = it })
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    Row(modifier = Modifier.border(androidx.compose.foundation.BorderStroke(1.dp, if (showOpponents) colors.ink else colors.line))) {
+                        ModeButton("Opponents", selected = showOpponents, onClick = onToggleOpponents)
+                    }
                 }
             }
 
             item {
+                Box(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 8.dp)) {
+                    BoutLineChart(
+                        chart = chart,
+                        selected = picked,
+                        onSelect = { picked = if (picked == it) null else it },
+                        showOpponents = showOpponents,
+                    )
+                }
+            }
+
+            if (showOpponents) {
+                item { ChartLegend(name = rikishi.name) }
+            }
+
+            item {
                 ChartPick(
-                    list = rikishi.list,
+                    list = chartList,
                     mode = mode,
                     index = picked,
                     onEdit = onEditEntry,
@@ -174,14 +205,6 @@ fun DetailScreen(
             item { RatingDistribution(rikishi.list) }
 
             item { TagChart(rikishi.list) }
-
-            item {
-                HeadToHead(
-                    entries = rikishi.list,
-                    selected = opponent,
-                    onSelect = { opponent = if (opponent == it) null else it },
-                )
-            }
 
             if (matching != null) {
                 item {
@@ -436,50 +459,53 @@ private fun RatingDistribution(list: List<RikishiEntry>) {
     }
 }
 
-/** Opponents faced, most bouts first; tap one to filter the list to that matchup. */
-@OptIn(ExperimentalLayoutApi::class)
+/** Narrows the Days chart to one basho. */
 @Composable
-private fun HeadToHead(entries: List<RikishiEntry>, selected: Int?, onSelect: (Int) -> Unit) {
+private fun ChartBashoPicker(bashoIds: List<String>, selected: String?, onPick: (String?) -> Unit) {
     val colors = LocalSumoColors.current
-    val byOpp = entries.groupBy { it.oppId }.values
-        .sortedWith(compareByDescending<List<RikishiEntry>> { it.size }.thenBy { it.last().opp })
-    if (byOpp.isEmpty()) return
-    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp)) {
-        Text(
-            "HEAD-TO-HEAD",
-            style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.14f.em, color = colors.faint),
-        )
-        FlowRow(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier = Modifier
+                .border(1.dp, colors.ink)
+                .clickable { open = true }
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            byOpp.forEach { bouts ->
-                val id = bouts.first().oppId
-                val on = id == selected
-                val wins = bouts.count { it.won }
-                Box(
-                    modifier = Modifier
-                        .border(1.dp, if (on) colors.ink else colors.line)
-                        .background(if (on) colors.ink else colors.bg)
-                        .clickable { onSelect(id) }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        "${bouts.last().opp} ${wins}–${bouts.size - wins}",
-                        style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = if (on) colors.bg else colors.ink, fontFeatureSettings = TabularNums),
-                    )
-                }
-            }
-        }
-        selected?.let { id ->
-            val vs = entries.filter { it.oppId == id }
-            val avg = vs.map { it.rating }.average()
             Text(
-                "Avg ${String.format(java.util.Locale.US, "%.1f", avg)} in ${vs.size} bout${if (vs.size == 1) "" else "s"} vs ${vs.last().opp}",
-                modifier = Modifier.padding(top = 8.dp),
-                style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = colors.mute),
+                (selected?.let { bashoLabel(it) } ?: "All basho") + "  ▾",
+                style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 11.sp, color = colors.ink),
             )
         }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("All basho") }, onClick = { open = false; onPick(null) })
+            bashoIds.forEach { id ->
+                DropdownMenuItem(text = { Text(bashoLabel(id)) }, onClick = { open = false; onPick(id) })
+            }
+        }
+    }
+}
+
+/** Which line is whose once the opponents' line is on. */
+@Composable
+private fun ChartLegend(name: String) {
+    val colors = LocalSumoColors.current
+    val style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, color = colors.mute)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Canvas(modifier = Modifier.size(width = 18.dp, height = 8.dp)) {
+            drawLine(colors.ink, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), strokeWidth = 2.dp.toPx())
+        }
+        Text(name, modifier = Modifier.padding(start = 6.dp, end = 16.dp), style = style)
+        Canvas(modifier = Modifier.size(width = 18.dp, height = 8.dp)) {
+            drawLine(
+                colors.faint, Offset(0f, size.height / 2), Offset(size.width, size.height / 2),
+                strokeWidth = 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx())),
+            )
+        }
+        Text("Opponents", modifier = Modifier.padding(start = 6.dp), style = style)
     }
 }

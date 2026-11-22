@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.aquanoodle.sumorater.data.Bout
-import com.aquanoodle.sumorater.data.ChartData
 import com.aquanoodle.sumorater.data.ChartMode
 import com.aquanoodle.sumorater.data.RatingsRepository
 import com.aquanoodle.sumorater.data.Rating
@@ -13,7 +12,6 @@ import com.aquanoodle.sumorater.data.RikishiEntry
 import com.aquanoodle.sumorater.data.SAMPLE
 import com.aquanoodle.sumorater.data.SumoApi
 import com.aquanoodle.sumorater.data.WhereState
-import com.aquanoodle.sumorater.data.buildChart
 import com.aquanoodle.sumorater.data.currentBashoDay
 import com.aquanoodle.sumorater.data.perRikishi
 import com.aquanoodle.sumorater.data.ratingKey
@@ -645,6 +643,10 @@ class SumoController(private val repo: RatingsRepository) {
         state = state.copy(isDark = dark)
     }
 
+    fun toggleOpponents() {
+        state = state.copy(showOpponents = !state.showOpponents)
+    }
+
     fun setMode(mode: ChartMode) {
         state = state.copy(mode = mode)
     }
@@ -655,7 +657,4 @@ class SumoController(private val repo: RatingsRepository) {
     }
 
     fun perRikishiMap(): Map<Int, RikishiAggregate> = perRikishi(state.ratings)
-
-    fun chartFor(selected: RikishiAggregate?): ChartData =
-        if (selected == null) ChartData(emptyList(), emptyList(), "", "") else buildChart(selected.list, state.mode)
 }

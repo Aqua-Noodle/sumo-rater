@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -32,6 +33,7 @@ fun BoutLineChart(
     modifier: Modifier = Modifier,
     selected: Int? = null,
     onSelect: ((Int) -> Unit)? = null,
+    showOpponents: Boolean = false,
 ) {
     val colors = LocalSumoColors.current
     val textMeasurer = rememberTextMeasurer()
@@ -74,6 +76,22 @@ fun BoutLineChart(
         listOf(10f to "10", 70f to "5", 130f to "0").forEach { (gy, label) ->
             val measured = textMeasurer.measure(label, labelStyle)
             drawText(measured, topLeft = Offset(0f, px(gy) - measured.size.height / 2f))
+        }
+
+        if (showOpponents) {
+            // Opponents' scores: muted and dashed, broken where an opponent wasn't rated.
+            val dash = PathEffect.dashPathEffect(floatArrayOf(px(4f), px(3f)))
+            var prev: Offset? = null
+            chart.oppPoints.forEach { p ->
+                val pt = p?.let { Offset(px(it.x), px(it.y)) }
+                if (pt != null && prev != null) {
+                    drawLine(colors.faint, prev!!, pt, strokeWidth = px(1.5f), pathEffect = dash, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                }
+                prev = pt
+            }
+            chart.oppPoints.filterNotNull().forEach { p ->
+                drawCircle(color = colors.faint, radius = px(2.5f), center = Offset(px(p.x), px(p.y)))
+            }
         }
 
         if (chart.points.size >= 2) {

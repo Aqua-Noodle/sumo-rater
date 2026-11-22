@@ -190,6 +190,8 @@ data class RikishiEntry(
     val tags: List<String>,
     /** The tags that count for this wrestler (see [creditedTags]). */
     val credited: List<String> = emptyList(),
+    /** The score the opponent got in the same bout, if rated. */
+    val oppRating: Int? = null,
 )
 
 data class RikishiAggregate(

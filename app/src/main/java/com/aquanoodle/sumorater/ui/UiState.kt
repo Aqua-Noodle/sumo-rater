@@ -27,6 +27,8 @@ data class UiState(
     val refreshing: Boolean = false,
     val selected: Int? = null,
     val mode: ChartMode = ChartMode.DAY,
+    /** Wrestler chart: also draw the opponents' scores. */
+    val showOpponents: Boolean = false,
     val isDark: Boolean = false,
     val photos: Map<Int, String> = emptyMap(),
     val initialized: Boolean = false,

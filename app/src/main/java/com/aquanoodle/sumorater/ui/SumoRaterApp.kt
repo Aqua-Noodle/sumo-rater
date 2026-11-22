@@ -269,10 +269,11 @@ fun SumoRaterApp() {
                     DetailScreen(
                         rikishi = aggregate,
                         photoPath = state.photos[aggregate.id],
-                        chart = controller.chartFor(aggregate),
                         mode = state.mode,
                         onBack = controller::navigateBack,
                         onOpenRikishi = { if (it in ratedIds) controller.openDetail(it) },
+                        showOpponents = state.showOpponents,
+                        onToggleOpponents = controller::toggleOpponents,
                         onModeChange = controller::setMode,
                         onPhotoTap = { requestPhoto(aggregate.id) },
                         onEditEntry = { controller.editBout(it) },

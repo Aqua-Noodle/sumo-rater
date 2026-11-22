@@ -7,7 +7,7 @@ fun perRikishi(ratings: Map<String, Rating>): Map<Int, RikishiAggregate> {
     class Acc(var name: String, val list: MutableList<RikishiEntry> = mutableListOf())
 
     val map = LinkedHashMap<Int, Acc>()
-    fun add(key: String, r: Rating, id: Int, name: String, rank: String, oppId: Int, opp: String, won: Boolean, rating: Int?) {
+    fun add(key: String, r: Rating, id: Int, name: String, rank: String, oppId: Int, opp: String, won: Boolean, rating: Int?, oppRating: Int?) {
         if (rating == null) return
         val acc = map.getOrPut(id) { Acc(name) }
         acc.name = name
@@ -17,6 +17,7 @@ fun perRikishi(ratings: Map<String, Rating>): Map<Int, RikishiAggregate> {
                 oppId = oppId, opp = opp, won = won, rating = rating, rank = rank,
                 note = r.note, kimarite = r.kimarite, tags = r.tags,
                 credited = creditedTags(r, id),
+                oppRating = oppRating,
             )
         )
     }
@@ -24,8 +25,8 @@ fun perRikishi(ratings: Map<String, Rating>): Map<Int, RikishiAggregate> {
     ratings.forEach { (key, r) ->
         // Pre-ratings don't know who won yet, so they stay out of stats until resolved.
         if (r.pending) return@forEach
-        add(key, r, r.winnerId, r.winnerName, r.winnerRank, r.loserId, r.loserName, true, r.w)
-        add(key, r, r.loserId, r.loserName, r.loserRank, r.winnerId, r.winnerName, false, r.l)
+        add(key, r, r.winnerId, r.winnerName, r.winnerRank, r.loserId, r.loserName, true, r.w, r.l)
+        add(key, r, r.loserId, r.loserName, r.loserRank, r.winnerId, r.winnerName, false, r.l, r.w)
     }
 
     return map.mapValues { (id, acc) ->
