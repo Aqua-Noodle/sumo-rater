@@ -1,5 +1,10 @@
 package com.aquanoodle.sumorater.ui.screens
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import com.aquanoodle.sumorater.ui.theme.ConflictRed
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -122,6 +127,10 @@ fun RateScreen(
     onOpenBubble: () -> Unit,
     ratedIds: Set<Int> = emptySet(),
     onOpenRikishi: (Int) -> Unit = {},
+    conflict: String? = null,
+    conflictsToday: Int = 0,
+    onNextConflict: () -> Unit = {},
+    onDiscard: () -> Unit = {},
 ) {
     val colors = LocalSumoColors.current
     val bout = bouts.getOrNull(idx)
@@ -142,7 +151,13 @@ fun RateScreen(
             .background(colors.bg)
             .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.ime)),
     ) {
-        TopBar(progressLabel = progressLabel, onOpenMenu = onOpenMenu, onOpenBubble = onOpenBubble)
+        TopBar(
+            progressLabel = progressLabel,
+            onOpenMenu = onOpenMenu,
+            onOpenBubble = onOpenBubble,
+            conflicts = conflictsToday,
+            onConflicts = onNextConflict,
+        )
 
         val scope = rememberCoroutineScope()
         val swipe = remember { CardSwipe(scope) }
@@ -205,6 +220,8 @@ fun RateScreen(
                         onPhotoTap = onPhotoTap,
                         ratedIds = ratedIds,
                         onOpenRikishi = onOpenRikishi,
+                        conflict = conflict,
+                        onDiscard = onDiscard,
                     )
                     isDone -> DoneState(
                         bashoLabel = bashoLabel,
@@ -258,7 +275,7 @@ fun RateScreen(
 }
 
 @Composable
-private fun TopBar(progressLabel: String, onOpenMenu: () -> Unit, onOpenBubble: () -> Unit) {
+private fun TopBar(progressLabel: String, onOpenMenu: () -> Unit, onOpenBubble: () -> Unit, conflicts: Int, onConflicts: () -> Unit) {
     val colors = LocalSumoColors.current
     Row(
         modifier = Modifier
@@ -280,6 +297,19 @@ private fun TopBar(progressLabel: String, onOpenMenu: () -> Unit, onOpenBubble: 
                 fontFeatureSettings = TabularNums,
             ),
         )
+        if (conflicts > 0) {
+            // Pre-ratings that contradict the result; tap to step through them.
+            Box(modifier = Modifier.size(48.dp).clickable(onClick = onConflicts), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(ConflictRed).padding(horizontal = 8.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        "$conflicts",
+                        style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = Color.White, fontFeatureSettings = TabularNums),
+                    )
+                }
+            }
+        }
         BubbleButton(onClick = onOpenBubble)
     }
 }
@@ -450,6 +480,8 @@ private fun BoutCard(
     onPhotoTap: (Int) -> Unit,
     ratedIds: Set<Int>,
     onOpenRikishi: (Int) -> Unit,
+    conflict: String?,
+    onDiscard: () -> Unit,
 ) {
     val colors = LocalSumoColors.current
     Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp)) {
@@ -468,8 +500,7 @@ private fun BoutCard(
                     onNameTap = if (bout.eastId in ratedIds) ({ onOpenRikishi(bout.eastId) }) else null,
                 )
 
-                val reason = bout.unratableReason
-                if (reason == null) {
+                if (bout.canRate) {
                     val eastTop = wheelTop(bout, east, west, isEast = true)
                     val westTop = wheelTop(bout, east, west, isEast = false)
                     // Keyed per bout so a wheel still settling can't write into the next bout.
@@ -501,7 +532,7 @@ private fun BoutCard(
                         )
                     }
                 } else {
-                    UnratableMiddle(reason)
+                    UnratableMiddle(bout.unratableReason.orEmpty())
                 }
 
                 RikishiColumn(
@@ -512,7 +543,11 @@ private fun BoutCard(
             }
         }
 
-        if (bout.ratable) {
+        if (conflict != null) {
+            ConflictNotice(text = conflict, canEdit = bout.canRate, onDiscard = onDiscard, modifier = Modifier.then(cardTransform))
+        }
+
+        if (bout.canRate) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -523,6 +558,17 @@ private fun BoutCard(
                 val faintCaption = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.18f.em, color = colors.faint)
                 Text("EAST", style = faintCaption)
                 Text("WEST", style = faintCaption)
+            }
+
+            if (bout.awaitingResult) {
+                // No winner known yet: both wheels are free; the scores are matched to
+                // winner/loser automatically once the result is published.
+                Text(
+                    "PRE-RATING · NO RESULT YET",
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp).then(cardTransform),
+                    textAlign = TextAlign.Center,
+                    style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 11.sp, letterSpacing = 0.16f.em, color = colors.faint),
+                )
             }
 
             // Kimarite appears once you've started scoring: same "reveal on interaction"
@@ -542,6 +588,35 @@ private fun BoutCard(
             key(bout.key) {
                 NotesSection(note = note, onNoteChange = onNoteChange, modifier = Modifier.then(cardTransform))
             }
+        }
+    }
+}
+
+/** A pre-rating that contradicts the result: what's wrong, how to fix it, or discard it. */
+@Composable
+private fun ConflictNotice(text: String, canEdit: Boolean, onDiscard: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)
+            .border(1.dp, ConflictRed)
+            .padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 2.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(ConflictRed))
+            Text(
+                "PRE-RATING CONFLICT",
+                modifier = Modifier.padding(start = 8.dp),
+                style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, letterSpacing = 0.14f.em, color = ConflictRed),
+            )
+        }
+        Text(
+            text + if (canEdit) " Adjust the scores and tap Next." else "",
+            modifier = Modifier.padding(top = 6.dp, end = 8.dp),
+            style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, lineHeight = 18.sp, color = LocalSumoColors.current.ink),
+        )
+        TextButton(onClick = onDiscard, modifier = Modifier.align(Alignment.End)) {
+            Text("Discard rating", style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = ConflictRed))
         }
     }
 }

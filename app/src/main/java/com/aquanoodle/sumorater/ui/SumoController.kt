@@ -17,6 +17,8 @@ import com.aquanoodle.sumorater.data.buildChart
 import com.aquanoodle.sumorater.data.currentBashoDay
 import com.aquanoodle.sumorater.data.perRikishi
 import com.aquanoodle.sumorater.data.ratingKey
+import com.aquanoodle.sumorater.data.resolvePreRating
+import com.aquanoodle.sumorater.data.scoreConflict
 import com.aquanoodle.sumorater.data.toBouts
 import com.aquanoodle.sumorater.data.toTorikumiRow
 import kotlinx.coroutines.CoroutineScope
@@ -35,12 +37,19 @@ import kotlinx.coroutines.launch
  * Highest score a side's wheel offers. Both wheels start at 10…0 so an untouched
  * bout gives nothing away; only once the winner has a score does the loser's
  * wheel shrink to below it (the original rating rule).
+ *
+ * Pre-ratings (no result yet) are free on both sides. A resolved pre-rating that
+ * conflicts keeps the loser's wheel at 10…0 so the scores you gave stay visible
+ * until you fix them.
  */
 fun wheelTop(bout: Bout, east: Int?, west: Int?, isEast: Boolean): Int {
+    if (bout.awaitingResult) return 10
     val eastWon = bout.winnerId == bout.eastId
     val winnerScore = if (eastWon) east else west
+    val loserScore = if (eastWon) west else east
     val isLoser = isEast != eastWon
-    return if (isLoser && winnerScore != null) winnerScore - 1 else 10
+    val consistent = loserScore == null || (winnerScore != null && loserScore < winnerScore)
+    return if (isLoser && winnerScore != null && winnerScore >= 1 && consistent) winnerScore - 1 else 10
 }
 
 /** Wheel rows top→bottom: top, top-1 … 0, then one blank row (= not rated). */
@@ -89,6 +98,7 @@ class SumoController(private val repo: RatingsRepository) {
             // Deliberately no loadDay() here: the Start screen lets the user pick
             // a basho/day first, so nothing about a bout is fetched or shown
             // until they explicitly choose to rate it.
+            resolvePendingInBackground()
         }
     }
 
@@ -128,6 +138,7 @@ class SumoController(private val repo: RatingsRepository) {
             val idx = (jumped ?: pos[key] ?: 0).coerceIn(0, bouts.size)
             state = state.copy(bouts = bouts, idx = idx, loading = false)
             backfillKimarite(bouts)
+            resolvePending(bouts)
             loadBout()
         }
     }
@@ -142,6 +153,42 @@ class SumoController(private val repo: RatingsRepository) {
         val ratings = state.ratings + missing
         state = state.copy(ratings = ratings)
         scope.launch { repo.saveRatings(ratings) }
+    }
+
+    /**
+     * Pre-ratings among [bouts] whose result is now out become normal ratings (scores
+     * moved to winner/loser, contradictions flagged). Returns how many new conflicts.
+     */
+    private fun resolvePending(bouts: List<Bout>): Int {
+        val resolved = bouts.mapNotNull { b ->
+            val r = state.ratings[b.key] ?: return@mapNotNull null
+            resolvePreRating(r, b)?.let { b.key to it }
+        }
+        if (resolved.isEmpty()) return 0
+        val ratings = state.ratings + resolved
+        state = state.copy(ratings = ratings)
+        scope.launch { repo.saveRatings(ratings) }
+        return resolved.count { it.second.conflict != null }
+    }
+
+    /**
+     * Checks days that still have pre-ratings (e.g. rated live, app closed before the
+     * results came out) so their conflicts show up in the calendar. Nothing is shown
+     * about the bouts themselves.
+     */
+    private fun resolvePendingInBackground() {
+        val days = state.ratings.values.filter { it.pending }
+            .map { it.bashoId to it.day }.distinct()
+            .sortedWith(compareByDescending<Pair<String, Int>> { it.first }.thenByDescending { it.second })
+            .take(10)
+        if (days.isEmpty()) return
+        scope.launch {
+            days.forEach { (bashoId, day) ->
+                val src = fetchDay(bashoId, day).src ?: return@forEach
+                repo.saveDayCache(cacheKey(bashoId, day), src)
+                resolvePending(toBouts(bashoId, day, src))
+            }
+        }
     }
 
     private class DayFetch(val reachable: Boolean, val src: Map<String, List<TorikumiRow>>?)
@@ -190,14 +237,20 @@ class SumoController(private val repo: RatingsRepository) {
             val sameBout = currentKey != null && bouts.getOrNull(idx)?.key == currentKey
             state = state.copy(bouts = bouts, idx = idx, refreshing = false)
             backfillKimarite(bouts)
+            val conflicts = resolvePending(bouts)
             if (!sameBout) loadBout()
             val newResults = bouts.count { it.ratable && it.key !in ratableBefore }
+            val message = when {
+                !hadBouts -> "Bouts loaded"
+                newResults == 0 -> "No new results yet"
+                newResults == 1 -> "1 new result"
+                else -> "$newResults new results"
+            }
             onResult(
-                when {
-                    !hadBouts -> "Bouts loaded"
-                    newResults == 0 -> "No new results yet"
-                    newResults == 1 -> "1 new result"
-                    else -> "$newResults new results"
+                when (conflicts) {
+                    0 -> message
+                    1 -> "$message · 1 pre-rating conflicts"
+                    else -> "$message · $conflicts pre-ratings conflict"
                 }
             )
         }
@@ -228,8 +281,13 @@ class SumoController(private val repo: RatingsRepository) {
     /** Winner ∈ 1–10 or blank; loser ∈ 0–(winner−1), or 0–10 while the winner is blank. */
     private fun onSideSettled(isEast: Boolean, index: Int) {
         val bout = currentBout() ?: return
-        if (!bout.ratable) return
+        if (!bout.canRate) return
         var v = wheelValueAt(wheelTop(bout, state.east, state.west, isEast), index)
+        if (bout.awaitingResult) {
+            // Pre-rating: no winner known yet, so both sides are free 0–10.
+            state = if (isEast) state.copy(east = v) else state.copy(west = v)
+            return
+        }
         val eastWon = bout.winnerId == bout.eastId
         if (isEast == eastWon) {
             if (v == 0) v = 1
@@ -249,29 +307,39 @@ class SumoController(private val repo: RatingsRepository) {
     fun save() {
         val bout = currentBout() ?: return
         val ratings = state.ratings.toMutableMap()
-        if (bout.ratable) {
+        if (bout.canRate) {
             val note = state.note.trim().ifEmpty { null }
             val tags = QUICK_TAGS.filter { it in state.tags }
             if (state.east == null && state.west == null && note == null && tags.isEmpty()) {
                 ratings.remove(bout.key)
             } else {
-                val eastWon = bout.winnerId == bout.eastId
+                // Pre-rating: east goes in the winner fields until the result is known.
+                val pending = bout.awaitingResult
+                val eastWon = pending || bout.winnerId == bout.eastId
+                val w = if (eastWon) state.east else state.west
+                val l = if (eastWon) state.west else state.east
                 val updated = Rating(
                     bashoId = bout.bashoId,
                     day = bout.day,
                     div = bout.div,
-                    winnerId = bout.winnerId,
+                    winnerId = if (eastWon) bout.eastId else bout.westId,
                     winnerName = if (eastWon) bout.eastName else bout.westName,
                     winnerRank = if (eastWon) bout.eastRank else bout.westRank,
                     loserId = if (eastWon) bout.westId else bout.eastId,
                     loserName = if (eastWon) bout.westName else bout.eastName,
                     loserRank = if (eastWon) bout.westRank else bout.eastRank,
-                    w = if (eastWon) state.east else state.west,
-                    l = if (eastWon) state.west else state.east,
+                    w = w,
+                    l = l,
                     ts = System.currentTimeMillis(),
                     note = note,
                     kimarite = bout.kimarite.ifBlank { null },
                     tags = tags,
+                    pending = pending,
+                    conflict = if (pending) null else scoreConflict(
+                        if (eastWon) bout.eastName else bout.westName,
+                        if (eastWon) bout.westName else bout.eastName,
+                        w, l,
+                    ),
                 )
                 val existing = ratings[bout.key]
                 // Paging past an unchanged bout shouldn't bump its timestamp.
@@ -288,6 +356,27 @@ class SumoController(private val repo: RatingsRepository) {
         }
         state = state.copy(ratings = ratings, idx = nextIdx)
         loadBout()
+    }
+
+    /** Removes the saved rating of the current bout (a pre-rated bout that turned out fusen etc.). */
+    fun discardCurrent() {
+        val bout = currentBout() ?: return
+        if (bout.key !in state.ratings) return
+        val ratings = state.ratings - bout.key
+        state = state.copy(ratings = ratings)
+        scope.launch { repo.saveRatings(ratings) }
+        loadBout()
+    }
+
+    /** Conflicting pre-ratings on the open day. */
+    fun conflictsToday(): Int = state.bouts.count { state.ratings[it.key]?.conflict != null }
+
+    /** Jumps to the next bout (after the current one, wrapping) whose pre-rating conflicts. */
+    fun nextConflict() {
+        val n = state.bouts.size
+        if (n == 0) return
+        val next = (1..n).map { (state.idx + it) % n }.firstOrNull { state.ratings[state.bouts[it].key]?.conflict != null } ?: return
+        jumpTo(next)
     }
 
     /** Previous bout; from the "day done" screen this reopens the last bout. */
@@ -327,6 +416,10 @@ class SumoController(private val repo: RatingsRepository) {
     fun setTableSort(sort: TableSort) {
         state = state.copy(tableSort = sort)
     }
+
+    /** Days of [bashoId] with a pre-rating that contradicts the result: red calendar dot. */
+    fun conflictDays(bashoId: String): Set<Int> =
+        state.ratings.values.filter { it.bashoId == bashoId && it.conflict != null }.map { it.day }.toSet()
 
     /** Days of [bashoId] with at least one scored bout, for the calendar's rated markers. */
     fun ratedDays(bashoId: String): Set<Int> =

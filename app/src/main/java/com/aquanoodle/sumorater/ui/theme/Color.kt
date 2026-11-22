@@ -41,3 +41,6 @@ val WinRowBg = Color(0xFFFFFFFF)
 val WinRowFg = Color(0xFF000000)
 val LossRowBg = Color(0xFF000000)
 val LossRowFg = Color(0xFFFFFFFF)
+
+/** Pre-rating conflicts: calendar dot, badge and notice. Readable on both themes. */
+val ConflictRed = Color(0xFFE0383E)

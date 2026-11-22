@@ -33,7 +33,15 @@ data class Bout(
             }
         }
 
+    /** Result is known and the bout can be rated normally. */
     val ratable: Boolean get() = unratableReason == null
+
+    /** Scheduled but no result published yet; can be pre-rated (east/west, no winner known). */
+    val awaitingResult: Boolean
+        get() = kimarite.isBlank() && winnerId != eastId && winnerId != westId
+
+    /** Wheels are shown: either a normal rating or a pre-rating. */
+    val canRate: Boolean get() = ratable || awaitingResult
 
     private companion object {
         val DRAW_KIMARITE = setOf("hikiwake", "itamiwake", "azukari", "mushobu")
@@ -64,7 +72,14 @@ data class RawBoutRow(
     val loserRank: String,
 )
 
-/** A saved rating for one bout. w/l may be null (blank = unrated side). */
+/**
+ * A saved rating for one bout. w/l may be null (blank = unrated side).
+ *
+ * [pending]: rated before the result was published. Until it is resolved, the winner
+ * fields hold the EAST wrestler and the loser fields the WEST one.
+ * [conflict]: set when a pre-rating turned out to contradict the result (e.g. the loser
+ * got the higher score); cleared once the bout is saved with consistent scores.
+ */
 @Serializable
 data class Rating(
     val bashoId: String,
@@ -82,6 +97,8 @@ data class Rating(
     val note: String? = null,
     val kimarite: String? = null,
     val tags: List<String> = emptyList(),
+    val pending: Boolean = false,
+    val conflict: String? = null,
 ) {
     val hasScore: Boolean get() = w != null || l != null
 

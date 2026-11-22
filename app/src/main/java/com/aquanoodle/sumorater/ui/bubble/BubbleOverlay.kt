@@ -51,6 +51,7 @@ import com.aquanoodle.sumorater.ui.SumoController
 import com.aquanoodle.sumorater.ui.components.WheelPicker
 import com.aquanoodle.sumorater.ui.theme.Archivo
 import com.aquanoodle.sumorater.ui.theme.LocalSumoColors
+import com.aquanoodle.sumorater.ui.theme.ConflictRed
 import com.aquanoodle.sumorater.ui.theme.SumoRaterTheme
 import com.aquanoodle.sumorater.ui.theme.TabularNums
 import com.aquanoodle.sumorater.ui.wheelIndexOf
@@ -154,7 +155,8 @@ private fun RatingPanel(
     val shape = RoundedCornerShape(16.dp)
     // Tag chips fold away so the panel stays small over a video.
     var showTags by remember { mutableStateOf(false) }
-    val canTag = bout != null && bout.ratable
+    val canTag = bout != null && bout.canRate
+    val conflict = bout?.let { state.ratings[it.key]?.conflict }
 
     val label = if (bout != null) {
         "${bout.div} · Day ${state.day} · ${state.idx + 1} / ${state.bouts.size}"
@@ -204,6 +206,22 @@ private fun RatingPanel(
             }
         }
 
+        if (conflict != null) {
+            Text(
+                "● $conflict",
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                textAlign = TextAlign.Center,
+                style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, lineHeight = 16.sp, color = ConflictRed),
+            )
+        } else if (bout != null && bout.awaitingResult) {
+            Text(
+                "PRE-RATING · NO RESULT YET",
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                textAlign = TextAlign.Center,
+                style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.16f.em, color = colors.faint),
+            )
+        }
+
         if (canTag && showTags) TagChips(selected = state.tags, onToggle = controller::toggleTag)
 
         Row(
@@ -233,8 +251,7 @@ private fun BoutRow(controller: SumoController, bout: Bout, east: Int?, west: In
         verticalAlignment = Alignment.CenterVertically,
     ) {
         NameColumn(bout.eastName, bout.eastRank)
-        val reason = bout.unratableReason
-        if (reason == null) {
+        if (bout.canRate) {
             val eastTop = wheelTop(bout, east, west, isEast = true)
             val westTop = wheelTop(bout, east, west, isEast = false)
             key(bout.key) {
@@ -260,7 +277,7 @@ private fun BoutRow(controller: SumoController, bout: Bout, east: Int?, west: In
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(reason, style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = colors.mute))
+                    Text(bout.unratableReason.orEmpty(), style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = colors.mute))
                     Text("NOT RATED", style = TextStyle(fontFamily = Archivo, fontSize = 9.sp, letterSpacing = 0.18f.em, color = colors.faint))
                 }
             }

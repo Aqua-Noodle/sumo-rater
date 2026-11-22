@@ -21,6 +21,8 @@ fun perRikishi(ratings: Map<String, Rating>): Map<Int, RikishiAggregate> {
     }
 
     ratings.forEach { (key, r) ->
+        // Pre-ratings don't know who won yet, so they stay out of stats until resolved.
+        if (r.pending) return@forEach
         add(key, r, r.winnerId, r.winnerName, r.winnerRank, r.loserId, r.loserName, true, r.w)
         add(key, r, r.loserId, r.loserName, r.loserRank, r.winnerId, r.winnerName, false, r.l)
     }
@@ -143,7 +145,7 @@ enum class BestScope(val label: String) { DAY("Day"), BASHO("Basho"), ALL("All t
 fun bestBouts(ratings: Map<String, Rating>, scope: BestScope, bashoId: String, day: Int): List<Pair<String, Rating>> =
     ratings.entries
         .filter { (_, r) ->
-            r.hasScore && when (scope) {
+            r.hasScore && !r.pending && when (scope) {
                 BestScope.DAY -> r.bashoId == bashoId && r.day == day
                 BestScope.BASHO -> r.bashoId == bashoId
                 BestScope.ALL -> true

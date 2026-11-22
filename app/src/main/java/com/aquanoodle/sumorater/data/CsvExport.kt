@@ -26,6 +26,8 @@ fun allRatingsCsv(ratings: Map<String, Rating>): String {
                 "winner_id", "winner", "winner_rank", "winner_rating",
                 "loser_id", "loser", "loser_rank", "loser_rating",
                 "kimarite", "tags", "note", "rated_at",
+                // Pre-ratings: result not out yet, winner_* = east and loser_* = west.
+                "result_pending", "conflict",
             )
         )
         rows.forEach { r ->
@@ -36,6 +38,7 @@ fun allRatingsCsv(ratings: Map<String, Rating>): String {
                     r.loserId, r.loserName, r.loserRank, r.l,
                     r.kimarite, r.tags.joinToString(TAG_SEPARATOR),
                     r.note, if (r.ts > 0) Instant.ofEpochMilli(r.ts).toString() else "",
+                    if (r.pending) "yes" else "", r.conflict,
                 )
             )
         }
@@ -145,12 +148,15 @@ fun parseRatingsCsv(text: String): CsvImport {
             loserId = loserId,
             loserName = get("loser"),
             loserRank = get("loser_rank"),
-            w = get("winner_rating").toIntOrNull()?.coerceIn(1, 10),
+            // 0 only occurs for pre-ratings / conflicts, which the importer keeps as they were.
+            w = get("winner_rating").toIntOrNull()?.coerceIn(0, 10),
             l = get("loser_rating").toIntOrNull()?.coerceIn(0, 10),
             ts = runCatching { Instant.parse(get("rated_at")).toEpochMilli() }.getOrDefault(0L),
             note = get("note").ifEmpty { null },
             kimarite = get("kimarite").ifEmpty { null },
             tags = get("tags").split(";").map { it.trim() }.filter { it.isNotEmpty() },
+            pending = get("result_pending").equals("yes", ignoreCase = true),
+            conflict = get("conflict").ifEmpty { null },
         )
     }
     return CsvImport.Ok(out, skipped)

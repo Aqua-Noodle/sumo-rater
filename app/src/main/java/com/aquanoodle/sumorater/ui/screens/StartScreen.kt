@@ -41,6 +41,7 @@ fun StartScreen(
     bashoList: List<BashoOption>,
     day: Int,
     ratedDays: Set<Int>,
+    conflictDays: Set<Int> = emptySet(),
     ratedRikishi: Int,
     onPickBasho: (String) -> Unit,
     onPickDay: (Int) -> Unit,
@@ -70,7 +71,7 @@ fun StartScreen(
         )
 
         Spacer(modifier = Modifier.height(28.dp))
-        BashoDayPicker(bashoLabel = bashoLabel, bashoList = bashoList, day = day, onPickBasho = onPickBasho, onPickDay = onPickDay, ratedDays = ratedDays)
+        BashoDayPicker(bashoLabel = bashoLabel, bashoList = bashoList, day = day, onPickBasho = onPickBasho, onPickDay = onPickDay, ratedDays = ratedDays, conflictDays = conflictDays)
 
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedButton(

@@ -45,6 +45,7 @@ fun MenuScreen(
     bashoList: List<BashoOption>,
     day: Int,
     ratedDays: Set<Int>,
+    conflictDays: Set<Int> = emptySet(),
     isDark: Boolean,
     onClose: () -> Unit,
     onOpenTable: () -> Unit,
@@ -94,7 +95,7 @@ fun MenuScreen(
 
             MenuLinkRow("Best bouts", "Top rated →", onOpenBest)
 
-            BashoDayPicker(bashoLabel = bashoLabel, bashoList = bashoList, day = day, onPickBasho = onPickBasho, onPickDay = onPickDay, ratedDays = ratedDays)
+            BashoDayPicker(bashoLabel = bashoLabel, bashoList = bashoList, day = day, onPickBasho = onPickBasho, onPickDay = onPickDay, ratedDays = ratedDays, conflictDays = conflictDays)
 
             Row(
                 modifier = Modifier

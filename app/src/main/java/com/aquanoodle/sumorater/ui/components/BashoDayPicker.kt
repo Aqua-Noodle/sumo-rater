@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.aquanoodle.sumorater.data.BashoOption
 import com.aquanoodle.sumorater.ui.theme.Archivo
 import com.aquanoodle.sumorater.ui.theme.LocalSumoColors
+import com.aquanoodle.sumorater.ui.theme.ConflictRed
 import com.aquanoodle.sumorater.ui.theme.TabularNums
 
 /** "Basho" label + select, and "Day" label + 5-column grid — shared by Menu and Start. */
@@ -45,6 +46,7 @@ fun BashoDayPicker(
     onPickDay: (Int) -> Unit,
     modifier: Modifier = Modifier,
     ratedDays: Set<Int> = emptySet(),
+    conflictDays: Set<Int> = emptySet(),
 ) {
     Column(modifier = modifier) {
         Column(
@@ -61,7 +63,7 @@ fun BashoDayPicker(
         Column(modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 18.dp)) {
             SectionLabel("Day")
             Spacer(modifier = Modifier.height(10.dp))
-            DayGrid(selectedDay = day, onPick = onPickDay, ratedDays = ratedDays)
+            DayGrid(selectedDay = day, onPick = onPickDay, ratedDays = ratedDays, conflictDays = conflictDays)
         }
     }
 }
@@ -107,7 +109,7 @@ fun BashoSelect(bashoLabel: String, bashoList: List<BashoOption>, onPick: (Strin
 }
 
 @Composable
-fun DayGrid(selectedDay: Int, onPick: (Int) -> Unit, ratedDays: Set<Int> = emptySet()) {
+fun DayGrid(selectedDay: Int, onPick: (Int) -> Unit, ratedDays: Set<Int> = emptySet(), conflictDays: Set<Int> = emptySet()) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         (1..15).chunked(5).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
@@ -116,6 +118,7 @@ fun DayGrid(selectedDay: Int, onPick: (Int) -> Unit, ratedDays: Set<Int> = empty
                         day = d,
                         selected = d == selectedDay,
                         rated = d in ratedDays,
+                        conflict = d in conflictDays,
                         onClick = { onPick(d) },
                         modifier = Modifier.weight(1f),
                     )
@@ -126,7 +129,7 @@ fun DayGrid(selectedDay: Int, onPick: (Int) -> Unit, ratedDays: Set<Int> = empty
 }
 
 @Composable
-private fun DayButton(day: Int, selected: Boolean, rated: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun DayButton(day: Int, selected: Boolean, rated: Boolean, conflict: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = LocalSumoColors.current
     val fg = if (selected) colors.bg else colors.ink
     Box(
@@ -156,6 +159,17 @@ private fun DayButton(day: Int, selected: Boolean, rated: Boolean, onClick: () -
                     .size(4.dp)
                     .clip(CircleShape)
                     .background(fg),
+            )
+        }
+        if (conflict) {
+            // A pre-rating on this day contradicts the published result.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 5.dp, end = 5.dp)
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(ConflictRed),
             )
         }
     }
