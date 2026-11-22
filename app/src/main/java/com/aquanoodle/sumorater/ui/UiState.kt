@@ -6,6 +6,7 @@ import com.aquanoodle.sumorater.data.BoutFilter
 import com.aquanoodle.sumorater.data.ChartMode
 import com.aquanoodle.sumorater.data.Rating
 import com.aquanoodle.sumorater.data.TableSort
+import com.aquanoodle.sumorater.data.Wrestler
 
 enum class Screen { START, RATE, MENU, TABLE, DETAIL, BEST }
 
@@ -31,4 +32,6 @@ data class UiState(
     val tableFilter: BoutFilter = BoutFilter(),
     val tableSort: TableSort = TableSort.SCORE,
     val bestScope: BestScope = BestScope.BASHO,
+    /** Day-15 lineups per division, offered when adding a playoff bout by hand. */
+    val playoffRoster: Map<String, List<Wrestler>> = emptyMap(),
 )

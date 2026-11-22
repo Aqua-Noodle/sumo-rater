@@ -1,5 +1,6 @@
 package com.aquanoodle.sumorater.ui.bubble
 
+import com.aquanoodle.sumorater.data.dayLabel
 import android.view.MotionEvent
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
@@ -159,9 +160,9 @@ private fun RatingPanel(
     val conflict = bout?.let { state.ratings[it.key]?.conflict }
 
     val label = if (bout != null) {
-        "${bout.div} · Day ${state.day} · ${state.idx + 1} / ${state.bouts.size}"
+        "${bout.div} · ${dayLabel(state.day)} · ${state.idx + 1} / ${state.bouts.size}"
     } else {
-        "${bashoLabel(state.bashoId)} · Day ${state.day}"
+        "${bashoLabel(state.bashoId)} · ${dayLabel(state.day)}"
     }.uppercase()
 
     Column(
@@ -197,7 +198,7 @@ private fun RatingPanel(
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
             when {
                 bout != null -> BoutRow(controller, bout, state.east, state.west)
-                isDone -> PanelMessage("${bashoLabel(state.bashoId)} · Day ${state.day} done")
+                isDone -> PanelMessage("${bashoLabel(state.bashoId)} · ${dayLabel(state.day)} done")
                 state.loading -> PanelMessage("Loading…")
                 else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     PanelMessage("Pick a basho and day in the app first.")

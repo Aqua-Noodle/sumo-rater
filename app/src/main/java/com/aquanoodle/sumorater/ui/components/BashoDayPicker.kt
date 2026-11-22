@@ -34,6 +34,7 @@ import com.aquanoodle.sumorater.data.BashoOption
 import com.aquanoodle.sumorater.ui.theme.Archivo
 import com.aquanoodle.sumorater.ui.theme.LocalSumoColors
 import com.aquanoodle.sumorater.ui.theme.ConflictRed
+import com.aquanoodle.sumorater.data.PLAYOFF_DAY
 import com.aquanoodle.sumorater.ui.theme.TabularNums
 
 /** "Basho" label + select, and "Day" label + 5-column grid — shared by Menu and Start. */
@@ -125,11 +126,29 @@ fun DayGrid(selectedDay: Int, onPick: (Int) -> Unit, ratedDays: Set<Int> = empty
                 }
             }
         }
+        // Always offered, whether or not there was one, so the calendar gives nothing away.
+        DayButton(
+            day = PLAYOFF_DAY,
+            label = "Playoff",
+            selected = selectedDay == PLAYOFF_DAY,
+            rated = PLAYOFF_DAY in ratedDays,
+            conflict = PLAYOFF_DAY in conflictDays,
+            onClick = { onPick(PLAYOFF_DAY) },
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
 @Composable
-private fun DayButton(day: Int, selected: Boolean, rated: Boolean, conflict: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun DayButton(
+    day: Int,
+    selected: Boolean,
+    rated: Boolean,
+    conflict: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = day.toString(),
+) {
     val colors = LocalSumoColors.current
     val fg = if (selected) colors.bg else colors.ink
     Box(
@@ -141,7 +160,7 @@ private fun DayButton(day: Int, selected: Boolean, rated: Boolean, conflict: Boo
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            day.toString(),
+            label,
             style = TextStyle(
                 fontFamily = Archivo,
                 fontWeight = FontWeight.Medium,

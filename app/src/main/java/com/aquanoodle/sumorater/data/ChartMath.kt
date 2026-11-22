@@ -18,7 +18,7 @@ fun buildChart(list: List<RikishiEntry>, mode: ChartMode): ChartData {
             Pt(bashoLabel(k), ratings.average(), null)
         }
     } else {
-        list.map { Pt("${bashoLabel(it.bashoId)} d${it.day}", it.rating.toDouble(), it.won) }
+        list.map { Pt("${bashoLabel(it.bashoId)} ${shortDayLabel(it.day)}", it.rating.toDouble(), it.won) }
     }
 
     val n = pts.size

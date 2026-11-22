@@ -66,3 +66,20 @@ fun resolvePreRating(r: Rating, bout: Bout): Rating? {
     if (bout.unratableReason != null) return oriented.copy(w = null, l = null, conflict = null)
     return clearConflict(oriented.copy(conflict = null))
 }
+
+/**
+ * The same scores as a pre-rating again (east in the winner fields, west in the loser
+ * fields), e.g. when the winner of a hand-added playoff bout is changed.
+ */
+fun Rating.asPending(bout: Bout): Rating {
+    val eastIsWinner = winnerId == bout.eastId
+    return copy(
+        winnerId = bout.eastId, winnerName = bout.eastName, winnerRank = bout.eastRank,
+        loserId = bout.westId, loserName = bout.westName, loserRank = bout.westRank,
+        w = if (eastIsWinner) w else l,
+        l = if (eastIsWinner) l else w,
+        kimarite = null,
+        pending = true,
+        conflict = null,
+    )
+}

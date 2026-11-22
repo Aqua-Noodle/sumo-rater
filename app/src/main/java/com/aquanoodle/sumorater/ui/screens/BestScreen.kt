@@ -1,5 +1,6 @@
 package com.aquanoodle.sumorater.ui.screens
 
+import com.aquanoodle.sumorater.data.dayLabel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -93,7 +94,7 @@ fun BestScreen(
             Spacer(modifier = Modifier.weight(1f))
             Text(
                 when (scope) {
-                    BestScope.DAY -> "$bashoLabel · Day $day"
+                    BestScope.DAY -> "$bashoLabel · ${dayLabel(day)}"
                     BestScope.BASHO -> bashoLabel
                     BestScope.ALL -> "${bouts.size} bouts"
                 },
@@ -144,7 +145,7 @@ private fun BestRow(rank: Int, r: Rating, onClick: () -> Unit, onOpenRikishi: (I
                 Text(" def. ", style = nameStyle.copy(fontWeight = FontWeight.Normal, color = colors.mute))
                 Text(r.loserName, modifier = Modifier.clickable { onOpenRikishi(r.loserId) }, style = nameStyle)
             }
-            val details = listOfNotNull("${bashoLabel(r.bashoId)} · Day ${r.day}", r.div, kimariteLabel(r.kimarite)) + r.tags
+            val details = listOfNotNull("${bashoLabel(r.bashoId)} · ${dayLabel(r.day)}", r.div, kimariteLabel(r.kimarite)) + r.tags
             Text(
                 details.joinToString(" · "),
                 style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, color = colors.mute),

@@ -1,5 +1,6 @@
 package com.aquanoodle.sumorater.ui.screens
 
+import com.aquanoodle.sumorater.data.dayLabel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -276,7 +277,7 @@ private fun RatingRow(entry: RikishiEntry, onClick: () -> Unit, onOpponentTap: (
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                "${bashoLabel(entry.bashoId)} · Day ${entry.day}",
+                "${bashoLabel(entry.bashoId)} · ${dayLabel(entry.day)}",
                 style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, letterSpacing = 0.04f.em, color = fg.copy(alpha = 0.7f)),
             )
             val extra = listOfNotNull(kimariteLabel(entry.kimarite)) + entry.tags

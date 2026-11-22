@@ -21,6 +21,15 @@ import com.aquanoodle.sumorater.data.resolvePreRating
 import com.aquanoodle.sumorater.data.isBlankRating
 import com.aquanoodle.sumorater.data.migrateConflict
 import com.aquanoodle.sumorater.data.toBouts
+import com.aquanoodle.sumorater.data.LAST_REGULAR_DAY
+import com.aquanoodle.sumorater.data.ManualBout
+import com.aquanoodle.sumorater.data.PLAYOFF_DAY
+import com.aquanoodle.sumorater.data.Wrestler
+import com.aquanoodle.sumorater.data.asPending
+import com.aquanoodle.sumorater.data.boutKey
+import com.aquanoodle.sumorater.data.playoffBouts
+import com.aquanoodle.sumorater.data.playoffSource
+import com.aquanoodle.sumorater.data.rosterFrom
 import com.aquanoodle.sumorater.data.toTorikumiRow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -88,6 +97,7 @@ class SumoController(private val repo: RatingsRepository) {
             val theme = repo.loadTheme()
             val where = repo.loadWhere() ?: currentBashoDay().let { WhereState(it.bashoId, it.day) }
             val photos = repo.loadPhotos()
+            manualBouts = repo.loadManualBouts()
             state = state.copy(
                 ratings = ratings,
                 isDark = theme == "dark",
@@ -134,7 +144,10 @@ class SumoController(private val repo: RatingsRepository) {
             }
             if (myToken != loadToken) return@launch
 
-            val bouts = src?.let { toBouts(bashoId, day, it) } ?: emptyList()
+            val bouts = boutsFor(bashoId, day, src)
+            if (day == PLAYOFF_DAY) {
+                state = state.copy(playoffRoster = rosterFrom(repo.loadDayCache(cacheKey(bashoId, LAST_REGULAR_DAY))))
+            }
             val jumped = jumpKey?.let { k -> bouts.indexOfFirst { it.key == k }.takeIf { it >= 0 } }
             val idx = (jumped ?: pos[key] ?: 0).coerceIn(0, bouts.size)
             state = state.copy(bouts = bouts, idx = idx, loading = false)
@@ -188,7 +201,7 @@ class SumoController(private val repo: RatingsRepository) {
             days.forEach { (bashoId, day) ->
                 val src = fetchDay(bashoId, day).src ?: return@forEach
                 repo.saveDayCache(cacheKey(bashoId, day), src)
-                resolvePending(toBouts(bashoId, day, src))
+                resolvePending(boutsFor(bashoId, day, src))
             }
         }
     }
@@ -196,7 +209,31 @@ class SumoController(private val repo: RatingsRepository) {
     private class DayFetch(val reachable: Boolean, val src: Map<String, List<TorikumiRow>>?)
 
     /** [DayFetch.src] is null when the server couldn't be reached or has nothing for that day yet. */
-    private suspend fun fetchDay(bashoId: String, day: Int): DayFetch = coroutineScope {
+    /** Playoff bouts added by hand, all basho. */
+    private var manualBouts: List<ManualBout> = emptyList()
+
+    /** The day's bouts from fetched/cached torikumi; the playoff day also gets your manual bouts. */
+    private fun boutsFor(bashoId: String, day: Int, src: Map<String, List<TorikumiRow>>?): List<Bout> =
+        if (day == PLAYOFF_DAY) playoffBouts(bashoId, src, manualBouts) else src?.let { toBouts(bashoId, day, it) } ?: emptyList()
+
+    private suspend fun fetchDay(bashoId: String, day: Int): DayFetch =
+        if (day == PLAYOFF_DAY) fetchPlayoffs(bashoId) else fetchTorikumiDay(bashoId, day)
+
+    /**
+     * The API's playoff bouts, wherever it lists them (extra day-15 entries or a day 16).
+     * Day 15 is cached on the way, which also feeds the wrestler list for manual bouts.
+     */
+    private suspend fun fetchPlayoffs(bashoId: String): DayFetch = coroutineScope {
+        val d15 = async { fetchTorikumiDay(bashoId, LAST_REGULAR_DAY) }
+        val d16 = async { fetchTorikumiDay(bashoId, PLAYOFF_DAY) }
+        val day15 = d15.await()
+        val day16 = d16.await()
+        day15.src?.let { repo.saveDayCache(cacheKey(bashoId, LAST_REGULAR_DAY), it) }
+        val src = playoffSource(day15.src, day16.src)
+        DayFetch(day15.reachable, src.ifEmpty { null })
+    }
+
+    private suspend fun fetchTorikumiDay(bashoId: String, day: Int): DayFetch = coroutineScope {
         val juryoDeferred = async { SumoApi.fetchTorikumi(bashoId, "Juryo", day) }
         val makuuchiDeferred = async { SumoApi.fetchTorikumi(bashoId, "Makuuchi", day) }
         val juryo = juryoDeferred.await()
@@ -233,7 +270,7 @@ class SumoController(private val repo: RatingsRepository) {
             val hadBouts = state.bouts.isNotEmpty()
             val ratableBefore = state.bouts.filter { it.ratable }.map { it.key }.toSet()
             val currentKey = currentBout()?.key
-            val bouts = toBouts(bashoId, day, src)
+            val bouts = boutsFor(bashoId, day, src)
             val idx = currentKey?.let { k -> bouts.indexOfFirst { it.key == k }.takeIf { it >= 0 } }
                 ?: state.idx.coerceIn(0, bouts.size)
             val sameBout = currentKey != null && bouts.getOrNull(idx)?.key == currentKey
@@ -309,6 +346,21 @@ class SumoController(private val repo: RatingsRepository) {
     fun save() {
         val bout = currentBout() ?: return
         val ratings = state.ratings.toMutableMap()
+        commit(bout, ratings)
+        val nextIdx = minOf(state.bouts.size, state.idx + 1)
+        pos[cacheKey()] = nextIdx
+        val posSnapshot = pos.toMap()
+        val changed = ratings != state.ratings
+        scope.launch {
+            if (changed) repo.saveRatings(ratings)
+            repo.savePos(posSnapshot)
+        }
+        state = state.copy(ratings = ratings, idx = nextIdx)
+        loadBout()
+    }
+
+    /** Writes the wheels/note/tags of [bout] into [ratings] (removing it when everything is blank). */
+    private fun commit(bout: Bout, ratings: MutableMap<String, Rating>) {
         if (bout.canRate) {
             val note = state.note.trim().ifEmpty { null }
             val tags = QUICK_TAGS.filter { it in state.tags }
@@ -348,16 +400,74 @@ class SumoController(private val repo: RatingsRepository) {
                 if (existing == null || existing.copy(ts = 0) != updated.copy(ts = 0)) ratings[bout.key] = updated
             }
         }
-        val nextIdx = minOf(state.bouts.size, state.idx + 1)
-        pos[cacheKey()] = nextIdx
-        val posSnapshot = pos.toMap()
-        val changed = ratings != state.ratings
-        scope.launch {
-            if (changed) repo.saveRatings(ratings)
-            repo.savePos(posSnapshot)
+    }
+
+    /** Adds a playoff bout by hand (playoff day only) and opens it. */
+    fun addPlayoffBout(div: String, east: Wrestler, west: Wrestler) {
+        if (state.day != PLAYOFF_DAY || east.id == west.id) return
+        val bashoId = state.bashoId
+        val row = TorikumiRow(east.id, east.name, east.rank, west.id, west.name, west.rank)
+        val added = ManualBout(bashoId, div, row)
+        val key = boutKey(bashoId, PLAYOFF_DAY, div, east.id, west.id)
+        if (state.bouts.none { it.key == key }) {
+            manualBouts = manualBouts + added
+            val snapshot = manualBouts
+            scope.launch { repo.saveManualBouts(snapshot) }
+            rebuildPlayoffs()
         }
-        state = state.copy(ratings = ratings, idx = nextIdx)
+        state.bouts.indexOfFirst { it.key == key }.takeIf { it >= 0 }?.let { jumpTo(it) }
+    }
+
+    /** Removes the current hand-added playoff bout and its rating. */
+    fun removePlayoffBout() {
+        val bout = currentBout()?.takeIf { it.manual } ?: return
+        manualBouts = manualBouts.filterNot { it.matches(bout) }
+        val snapshot = manualBouts
+        val ratings = state.ratings - bout.key
+        state = state.copy(ratings = ratings)
+        scope.launch {
+            repo.saveManualBouts(snapshot)
+            repo.saveRatings(ratings)
+        }
+        rebuildPlayoffs()
+        jumpTo(state.idx)
+    }
+
+    /**
+     * Sets (or clears, with null) who won the current hand-added playoff bout. Scores
+     * already entered are kept and re-matched to the new winner, like a pre-rating.
+     */
+    fun setPlayoffWinner(winnerId: Int?) {
+        val bout = currentBout()?.takeIf { it.manual } ?: return
+        val ratings = state.ratings.toMutableMap()
+        commit(bout, ratings)
+        manualBouts = manualBouts.map { if (it.matches(bout)) it.copy(row = it.row.copy(winnerId = winnerId ?: 0)) else it }
+        val snapshot = manualBouts
+        rebuildPlayoffs()
+        val updated = state.bouts.firstOrNull { it.key == bout.key }
+        ratings[bout.key]?.let { r ->
+            val pending = r.asPending(bout)
+            ratings[bout.key] = updated?.let { resolvePreRating(pending, it) } ?: pending
+        }
+        state = state.copy(ratings = ratings)
+        scope.launch {
+            repo.saveManualBouts(snapshot)
+            repo.saveRatings(ratings)
+        }
         loadBout()
+    }
+
+    private fun ManualBout.matches(bout: Bout) =
+        bashoId == bout.bashoId && div == bout.div &&
+            setOf(row.eastId, row.westId) == setOf(bout.eastId, bout.westId)
+
+    /** Re-merges hand-added bouts into the open playoff day, keeping published ones as they are. */
+    private fun rebuildPlayoffs() {
+        if (state.day != PLAYOFF_DAY) return
+        val published = state.bouts.filter { !it.manual }
+        val keys = published.map { it.key }.toSet()
+        val own = playoffBouts(state.bashoId, null, manualBouts).filter { it.key !in keys }
+        state = state.copy(bouts = published + own)
     }
 
     /** Conflicting pre-ratings on the open day. */

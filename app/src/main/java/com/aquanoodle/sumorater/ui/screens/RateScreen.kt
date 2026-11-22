@@ -1,5 +1,11 @@
 package com.aquanoodle.sumorater.ui.screens
 
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.AlertDialog
+import com.aquanoodle.sumorater.data.Wrestler
+import com.aquanoodle.sumorater.data.PLAYOFF_DAY
+import com.aquanoodle.sumorater.data.dayLabel
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -130,6 +136,10 @@ fun RateScreen(
     conflict: String? = null,
     conflictsToday: Int = 0,
     onNextConflict: () -> Unit = {},
+    playoffRoster: Map<String, List<Wrestler>> = emptyMap(),
+    onAddPlayoff: (div: String, east: Wrestler, west: Wrestler) -> Unit = { _, _, _ -> },
+    onSetWinner: (Int?) -> Unit = {},
+    onRemoveBout: () -> Unit = {},
 ) {
     val colors = LocalSumoColors.current
     val bout = bouts.getOrNull(idx)
@@ -137,11 +147,21 @@ fun RateScreen(
     val isEmpty = bouts.isEmpty()
     // Back stays available on the "day done" screen, so a finished day can be reopened.
     val canBack = idx > 0 && bouts.isNotEmpty()
+    val isPlayoff = day == PLAYOFF_DAY
+    var showAddPlayoff by remember { mutableStateOf(false) }
+    if (showAddPlayoff) {
+        AddPlayoffDialog(
+            roster = playoffRoster,
+            onAdd = { div, e, w -> showAddPlayoff = false; onAddPlayoff(div, e, w) },
+            onDismiss = { showAddPlayoff = false },
+        )
+    }
+    val openAddPlayoff: (() -> Unit)? = if (isPlayoff) ({ showAddPlayoff = true }) else null
 
     val progressLabel = if (bout != null) {
-        "${bout.div} · Day $day · ${idx + 1} / ${bouts.size}".uppercase()
+        "${bout.div} · ${dayLabel(day)} · ${idx + 1} / ${bouts.size}".uppercase()
     } else {
-        "$bashoLabel · Day $day".uppercase()
+        "$bashoLabel · ${dayLabel(day)}".uppercase()
     }
 
     Column(
@@ -220,6 +240,9 @@ fun RateScreen(
                         ratedIds = ratedIds,
                         onOpenRikishi = onOpenRikishi,
                         conflict = conflict,
+                        onAddPlayoff = openAddPlayoff,
+                        onSetWinner = onSetWinner,
+                        onRemoveBout = onRemoveBout,
                     )
                     isDone -> DoneState(
                         bashoLabel = bashoLabel,
@@ -227,10 +250,16 @@ fun RateScreen(
                         ratedCount = ratedToday,
                         onOpenTable = onOpenTable,
                         onRestartDay = onRestartDay,
+                        onAddPlayoff = openAddPlayoff,
                     )
                     isEmpty -> EmptyState(
-                        message = if (loading) "Loading…" else "No bout data available for $bashoLabel, day $day. Pull down to try again.",
+                        message = when {
+                            loading -> "Loading…"
+                            isPlayoff -> "No playoff bouts for $bashoLabel yet. Pull down to check again, or add one yourself."
+                            else -> "No bout data available for $bashoLabel, day $day. Pull down to try again."
+                        },
                         onPickAnotherDay = onOpenMenu,
+                        onAddPlayoff = if (loading) null else openAddPlayoff,
                     )
                 }
             }
@@ -348,6 +377,7 @@ private fun DoneState(
     ratedCount: Int,
     onOpenTable: () -> Unit,
     onRestartDay: () -> Unit,
+    onAddPlayoff: (() -> Unit)?,
 ) {
     val colors = LocalSumoColors.current
     Column(
@@ -357,7 +387,7 @@ private fun DoneState(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "$bashoLabel · Day $day done",
+            text = "$bashoLabel · ${dayLabel(day)} done",
             textAlign = TextAlign.Center,
             style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 28.sp, letterSpacing = (-0.02f).em, color = colors.ink),
         )
@@ -377,11 +407,16 @@ private fun DoneState(
         TextButton(onClick = onRestartDay) {
             Text("Back to first bout", style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.faint))
         }
+        if (onAddPlayoff != null) {
+            TextButton(onClick = onAddPlayoff) {
+                Text("+ Add playoff bout", style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.ink))
+            }
+        }
     }
 }
 
 @Composable
-private fun EmptyState(message: String, onPickAnotherDay: () -> Unit) {
+private fun EmptyState(message: String, onPickAnotherDay: () -> Unit, onAddPlayoff: (() -> Unit)? = null) {
     val colors = LocalSumoColors.current
     Column(
         modifier = Modifier
@@ -400,6 +435,129 @@ private fun EmptyState(message: String, onPickAnotherDay: () -> Unit) {
             colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.ink),
         ) {
             Text("Pick another day", style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 14.sp))
+        }
+        if (onAddPlayoff != null) {
+            TextButton(onClick = onAddPlayoff) {
+                Text("+ Add playoff bout", style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.ink))
+            }
+        }
+    }
+}
+
+/**
+ * Hand-added playoff bout: you say who won (nothing is fetched, so nothing is spoiled).
+ * Tapping the chosen side again clears it back to a pre-rating.
+ */
+@Composable
+private fun ManualWinnerRow(bout: Bout, onSetWinner: (Int?) -> Unit, modifier: Modifier = Modifier) {
+    val colors = LocalSumoColors.current
+    Column(modifier = modifier.fillMaxWidth().padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            "WHO WON?",
+            style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.18f.em, color = colors.faint),
+        )
+        Row(modifier = Modifier.padding(top = 6.dp).border(1.dp, colors.ink)) {
+            listOf(bout.eastId to bout.eastName, bout.westId to bout.westName).forEach { (id, name) ->
+                val on = bout.winnerId == id
+                Box(
+                    modifier = Modifier
+                        .background(if (on) colors.ink else colors.bg)
+                        .clickable { onSetWinner(if (on) null else id) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    Text(name, style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 13.sp, color = if (on) colors.bg else colors.ink))
+                }
+            }
+        }
+    }
+}
+
+/** Pick division and the two wrestlers (from the day-15 lineup) for a hand-added playoff bout. */
+@Composable
+private fun AddPlayoffDialog(
+    roster: Map<String, List<Wrestler>>,
+    onAdd: (div: String, east: Wrestler, west: Wrestler) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = LocalSumoColors.current
+    var div by remember { mutableStateOf("Makuuchi") }
+    var east by remember { mutableStateOf<Wrestler?>(null) }
+    var west by remember { mutableStateOf<Wrestler?>(null) }
+    val list = roster[div].orEmpty()
+    val canAdd = east != null && west != null && east?.id != west?.id
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.bg,
+        title = { Text("Add playoff bout", style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = colors.ink)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(modifier = Modifier.border(1.dp, colors.ink)) {
+                    listOf("Makuuchi", "Juryo").forEach { d ->
+                        val on = d == div
+                        Box(
+                            modifier = Modifier
+                                .background(if (on) colors.ink else colors.bg)
+                                .clickable { div = d; east = null; west = null }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) {
+                            Text(d, style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 12.sp, color = if (on) colors.bg else colors.ink))
+                        }
+                    }
+                }
+                if (list.isEmpty()) {
+                    Text(
+                        "The day-15 lineup isn't loaded yet. Pull down on the playoff day while online, then try again.",
+                        style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.mute, lineHeight = 18.sp),
+                    )
+                } else {
+                    WrestlerPicker("East", list, east, onPick = { east = it })
+                    WrestlerPicker("West", list, west, onPick = { west = it })
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onAdd(div, east!!, west!!) }, enabled = canAdd) {
+                Text("Add", style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = if (canAdd) colors.ink else colors.faint))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", style = TextStyle(fontFamily = Archivo, fontSize = 14.sp, color = colors.mute))
+            }
+        },
+    )
+}
+
+@Composable
+private fun WrestlerPicker(side: String, list: List<Wrestler>, selected: Wrestler?, onPick: (Wrestler) -> Unit) {
+    val colors = LocalSumoColors.current
+    var open by remember { mutableStateOf(false) }
+    Column {
+        Text(side.uppercase(), style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.18f.em, color = colors.faint))
+        Box(modifier = Modifier.padding(top = 4.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, colors.ink)
+                    .clickable { open = true }
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    selected?.let { "${it.name} · ${it.rank}" } ?: "Choose wrestler",
+                    modifier = Modifier.weight(1f),
+                    style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = if (selected == null) colors.faint else colors.ink),
+                )
+                Text("▾", style = TextStyle(fontFamily = Archivo, fontSize = 14.sp, color = colors.ink))
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                list.forEach { w ->
+                    DropdownMenuItem(
+                        text = { Text("${w.name} · ${w.rank}") },
+                        onClick = { open = false; onPick(w) },
+                    )
+                }
+            }
         }
     }
 }
@@ -479,6 +637,9 @@ private fun BoutCard(
     ratedIds: Set<Int>,
     onOpenRikishi: (Int) -> Unit,
     conflict: String?,
+    onAddPlayoff: (() -> Unit)?,
+    onSetWinner: (Int?) -> Unit,
+    onRemoveBout: () -> Unit,
 ) {
     val colors = LocalSumoColors.current
     Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp)) {
@@ -557,6 +718,10 @@ private fun BoutCard(
                 Text("WEST", style = faintCaption)
             }
 
+            if (bout.manual) {
+                ManualWinnerRow(bout = bout, onSetWinner = onSetWinner, modifier = Modifier.then(cardTransform))
+            }
+
             if (bout.awaitingResult) {
                 // No winner known yet: both wheels are free; the scores are matched to
                 // winner/loser automatically once the result is published.
@@ -584,6 +749,22 @@ private fun BoutCard(
 
             key(bout.key) {
                 NotesSection(note = note, onNoteChange = onNoteChange, modifier = Modifier.then(cardTransform))
+            }
+        }
+
+        if (onAddPlayoff != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp).then(cardTransform),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                TextButton(onClick = onAddPlayoff) {
+                    Text("+ Add playoff bout", style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.ink))
+                }
+                if (bout.manual) {
+                    TextButton(onClick = onRemoveBout) {
+                        Text("Remove this bout", style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.faint))
+                    }
+                }
             }
         }
     }

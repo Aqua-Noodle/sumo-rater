@@ -105,7 +105,9 @@ fun RawBoutRow.toTorikumiRow(): TorikumiRow {
 
 fun toBouts(bashoId: String, day: Int, src: Map<String, List<TorikumiRow>>): List<Bout> =
     DIVS.flatMap { div ->
-        (src[div] ?: emptyList()).map { b ->
+        val rows = src[div] ?: emptyList()
+        // Playoff bouts listed on day 15 belong to the playoff day, not the regular schedule.
+        (if (day == LAST_REGULAR_DAY) splitPlayoffs(rows).first else rows).map { b ->
             Bout(
                 key = boutKey(bashoId, day, div, b.eastId, b.westId),
                 bashoId = bashoId,

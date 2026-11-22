@@ -20,6 +20,8 @@ data class Bout(
     val westRank: String,
     val winnerId: Int,
     val kimarite: String,
+    /** A playoff bout you added yourself; its winner is set by you. */
+    val manual: Boolean = false,
 ) {
     /** Null when the bout can be rated, otherwise a short reason shown instead of the wheels. */
     val unratableReason: String?

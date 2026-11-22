@@ -27,6 +27,17 @@ class RatingsRepository(private val context: Context) {
         val THEME = stringPreferencesKey("sumo-rater.theme.v1")
         val WHERE = stringPreferencesKey("sumo-rater.where.v1")
         val PHOTOS = stringPreferencesKey("sumo-rater.photos.v1")
+        val MANUAL_BOUTS = stringPreferencesKey("sumo-rater.manual-bouts.v1")
+    }
+
+    /** Playoff bouts added by hand. */
+    suspend fun loadManualBouts(): List<ManualBout> {
+        val raw = context.dataStore.data.first()[Keys.MANUAL_BOUTS] ?: return emptyList()
+        return runCatching { json.decodeFromString<List<ManualBout>>(raw) }.getOrDefault(emptyList())
+    }
+
+    suspend fun saveManualBouts(bouts: List<ManualBout>) {
+        context.dataStore.edit { it[Keys.MANUAL_BOUTS] = json.encodeToString(bouts) }
     }
 
     suspend fun loadRatings(): Map<String, Rating> {

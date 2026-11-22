@@ -205,6 +205,10 @@ fun SumoRaterApp() {
                 conflict = state.bouts.getOrNull(state.idx)?.let { state.ratings[it.key]?.conflict },
                 conflictsToday = controller.conflictsToday(),
                 onNextConflict = controller::nextConflict,
+                playoffRoster = state.playoffRoster,
+                onAddPlayoff = controller::addPlayoffBout,
+                onSetWinner = controller::setPlayoffWinner,
+                onRemoveBout = controller::removePlayoffBout,
                 onOpenRikishi = { if (it in ratedIds) controller.openDetail(it) },
             )
 
