@@ -19,6 +19,10 @@ import com.aquanoodle.sumorater.data.resolvePreRating
 import com.aquanoodle.sumorater.data.isBlankRating
 import com.aquanoodle.sumorater.data.migrateConflict
 import com.aquanoodle.sumorater.data.toBouts
+import com.aquanoodle.sumorater.data.DaySlot
+import com.aquanoodle.sumorater.data.Pick
+import com.aquanoodle.sumorater.data.PickScore
+import com.aquanoodle.sumorater.data.wrestlerSlots
 import com.aquanoodle.sumorater.data.LAST_REGULAR_DAY
 import com.aquanoodle.sumorater.data.ManualBout
 import com.aquanoodle.sumorater.data.PLAYOFF_DAY
@@ -99,12 +103,16 @@ class SumoController(private val repo: RatingsRepository) {
             val where = repo.loadWhere() ?: currentBashoDay().let { WhereState(it.bashoId, it.day) }
             val photos = repo.loadPhotos()
             manualBouts = repo.loadManualBouts()
+            val dayCaches = repo.loadAllDayCaches()
+            val picks = repo.loadPicks()
             state = state.copy(
                 ratings = ratings,
                 isDark = theme == "dark",
                 bashoId = where.bashoId,
                 day = where.day,
                 photos = photos,
+                dayCaches = dayCaches,
+                picks = picks,
                 initialized = true,
             )
             // Deliberately no loadDay() here: the Start screen lets the user pick
@@ -138,7 +146,7 @@ class SumoController(private val repo: RatingsRepository) {
             if (myToken != loadToken) return@launch
 
             val src = if (fetched.src != null) {
-                repo.saveDayCache(key, fetched.src)
+                storeDay(key, fetched.src)
                 fetched.src
             } else {
                 repo.loadDayCache(key) ?: SAMPLE[key]?.mapValues { (_, rows) -> rows.map { it.toTorikumiRow() } }
@@ -201,7 +209,7 @@ class SumoController(private val repo: RatingsRepository) {
         scope.launch {
             days.forEach { (bashoId, day) ->
                 val src = fetchDay(bashoId, day).src ?: return@forEach
-                repo.saveDayCache(cacheKey(bashoId, day), src)
+                storeDay(cacheKey(bashoId, day), src)
                 resolvePending(boutsFor(bashoId, day, src))
             }
         }
@@ -210,6 +218,57 @@ class SumoController(private val repo: RatingsRepository) {
     private class DayFetch(val reachable: Boolean, val src: Map<String, List<TorikumiRow>>?)
 
     /** [DayFetch.src] is null when the server couldn't be reached or has nothing for that day yet. */
+    /** Saves a fetched day and keeps it in memory for records, timelines and picks. */
+    private suspend fun storeDay(key: String, src: Map<String, List<TorikumiRow>>) {
+        repo.saveDayCache(key, src)
+        state = state.copy(dayCaches = state.dayCaches + (key to src))
+    }
+
+    /** Last regular day of [bashoId] you've rated anything on: records and timelines stop there (no spoilers). */
+    fun furthestRatedDay(bashoId: String): Int =
+        state.ratings.values.filter { it.bashoId == bashoId && it.day <= LAST_REGULAR_DAY }.maxOfOrNull { it.day } ?: 0
+
+    private val fetchingDays = HashSet<String>()
+
+    /** Fetches days up to [furthestRatedDay] that aren't cached yet, so records and timelines are complete. */
+    fun ensureDays(bashoIds: Collection<String>) {
+        val missing = bashoIds.flatMap { b -> (1..furthestRatedDay(b)).map { b to it } }
+            .filter { (b, d) -> cacheKey(b, d) !in state.dayCaches && cacheKey(b, d) !in fetchingDays }
+        if (missing.isEmpty()) return
+        missing.forEach { (b, d) -> fetchingDays.add(cacheKey(b, d)) }
+        scope.launch {
+            missing.forEach { (b, d) ->
+                fetchTorikumiDay(b, d).src?.let { storeDay(cacheKey(b, d), it) }
+                fetchingDays.remove(cacheKey(b, d))
+            }
+        }
+    }
+
+    /** [id]'s days in [bashoIds] (up to the furthest day you've rated in each). */
+    fun slotsFor(id: Int, bashoIds: Collection<String>): List<DaySlot> =
+        bashoIds.sorted().flatMap { b ->
+            wrestlerSlots(id, b, furthestRatedDay(b)) { d -> state.dayCaches[cacheKey(b, d)] }
+        }
+
+    /** Your picks' score, overall or in bouts involving [wrestlerId]. */
+    fun pickScore(wrestlerId: Int? = null): PickScore =
+        com.aquanoodle.sumorater.data.pickScore(state.picks, state.ratings, { b, d -> state.dayCaches[cacheKey(b, d)] }, wrestlerId)
+
+    /** A pick is possible until the bout has a rating or a wheel was moved; one per bout, final. */
+    fun canPick(): Boolean {
+        val bout = currentBout() ?: return false
+        return bout.canRate && bout.key !in state.picks && bout.key !in state.ratings && !state.wheelTouched
+    }
+
+    fun pick(wrestlerId: Int) {
+        val bout = currentBout() ?: return
+        if (!canPick() || (wrestlerId != bout.eastId && wrestlerId != bout.westId)) return
+        val p = Pick(bout.bashoId, bout.day, bout.div, bout.eastId, bout.westId, wrestlerId, System.currentTimeMillis())
+        val picks = state.picks + (bout.key to p)
+        state = state.copy(picks = picks)
+        scope.launch { repo.savePicks(picks) }
+    }
+
     /** Playoff bouts added by hand, all basho. */
     private var manualBouts: List<ManualBout> = emptyList()
 
@@ -229,7 +288,7 @@ class SumoController(private val repo: RatingsRepository) {
         val d16 = async { fetchTorikumiDay(bashoId, PLAYOFF_DAY) }
         val day15 = d15.await()
         val day16 = d16.await()
-        day15.src?.let { repo.saveDayCache(cacheKey(bashoId, LAST_REGULAR_DAY), it) }
+        day15.src?.let { storeDay(cacheKey(bashoId, LAST_REGULAR_DAY), it) }
         val src = playoffSource(day15.src, day16.src)
         DayFetch(day15.reachable, src.ifEmpty { null })
     }
@@ -267,7 +326,7 @@ class SumoController(private val repo: RatingsRepository) {
                 onResult(if (fetched.reachable) "No results published yet" else "Couldn't reach the server")
                 return@launch
             }
-            repo.saveDayCache(cacheKey(bashoId, day), src)
+            storeDay(cacheKey(bashoId, day), src)
             val hadBouts = state.bouts.isNotEmpty()
             val ratableBefore = state.bouts.filter { it.ratable }.map { it.key }.toSet()
             val currentKey = currentBout()?.key
@@ -308,6 +367,7 @@ class SumoController(private val repo: RatingsRepository) {
             note = saved?.note.orEmpty(),
             tags = saved?.tags.orEmpty().toSet(),
             tagOwners = saved?.tagOwners.orEmpty().mapValues { it.value.toSet() },
+            wheelTouched = false,
         )
     }
 
@@ -343,6 +403,7 @@ class SumoController(private val repo: RatingsRepository) {
     private fun onSideSettled(isEast: Boolean, index: Int) {
         val bout = currentBout() ?: return
         if (!bout.canRate) return
+        state = state.copy(wheelTouched = true)
         var v = wheelValueAt(wheelTop(bout, state.east, state.west, isEast), index)
         if (bout.awaitingResult) {
             // Pre-rating: no winner known yet, so both sides are free 0–10.

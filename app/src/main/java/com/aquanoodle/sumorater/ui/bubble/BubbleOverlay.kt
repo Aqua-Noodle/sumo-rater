@@ -224,6 +224,33 @@ private fun RatingPanel(
             )
         }
 
+        if (bout != null && controller.canPick()) {
+            // Guess the winner before rating; one tap, final.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("PICK", style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.16f.em, color = colors.faint))
+                listOf(bout.eastId to bout.eastName, bout.westId to bout.westName).forEach { (id, name) ->
+                    Box(
+                        modifier = Modifier.border(1.dp, colors.ink).clickable { controller.pick(id) }.padding(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        Text(name, maxLines = 1, style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = colors.ink))
+                    }
+                }
+            }
+        } else if (bout != null) {
+            state.picks[bout.key]?.let { p ->
+                Text(
+                    "YOUR PICK · " + (if (p.pickedId == bout.eastId) bout.eastName else bout.westName).uppercase(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    textAlign = TextAlign.Center,
+                    style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.14f.em, color = colors.faint),
+                )
+            }
+        }
+
         if (canTag && showTags && bout != null) TagChips(bout = bout, selected = state.tags, owners = state.tagOwners, onToggle = controller::toggleTag)
 
         Row(

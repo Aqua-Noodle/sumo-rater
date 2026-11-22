@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aquanoodle.sumorater.data.AppUpdater
 import com.aquanoodle.sumorater.data.BashoOption
+import com.aquanoodle.sumorater.data.PickScore
 import com.aquanoodle.sumorater.ui.components.BashoDayPicker
 import com.aquanoodle.sumorater.ui.components.UpdateRow
 import com.aquanoodle.sumorater.ui.theme.Archivo
@@ -55,6 +56,7 @@ fun MenuScreen(
     onExportCsv: () -> Unit,
     onImportCsv: () -> Unit,
     onOpenBest: () -> Unit,
+    pickScore: PickScore = PickScore(0, 0),
     updater: AppUpdater,
 ) {
     val colors = LocalSumoColors.current
@@ -94,6 +96,23 @@ fun MenuScreen(
             }
 
             MenuLinkRow("Best bouts", "Top rated →", onOpenBest)
+
+            if (pickScore.decided > 0) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(BorderStroke(1.dp, colors.line))
+                        .padding(horizontal = 24.dp, vertical = 18.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Your picks", style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = colors.ink))
+                    Text(
+                        "${pickScore.right} / ${pickScore.decided} right · ${pickScore.right * 100 / pickScore.decided}%",
+                        style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, color = colors.faint, fontFeatureSettings = TabularNums),
+                    )
+                }
+            }
 
             BashoDayPicker(bashoLabel = bashoLabel, bashoList = bashoList, day = day, onPickBasho = onPickBasho, onPickDay = onPickDay, ratedDays = ratedDays, conflictDays = conflictDays)
 

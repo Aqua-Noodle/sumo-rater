@@ -1,5 +1,15 @@
 package com.aquanoodle.sumorater.ui.screens
 
+import com.aquanoodle.sumorater.data.buildTimelineChart
+import com.aquanoodle.sumorater.data.wrestlerTimeline
+import com.aquanoodle.sumorater.data.recordOf
+import com.aquanoodle.sumorater.data.OffItem
+import com.aquanoodle.sumorater.data.MissingItem
+import com.aquanoodle.sumorater.data.RatedItem
+import com.aquanoodle.sumorater.data.TimelineItem
+import com.aquanoodle.sumorater.data.PickScore
+import com.aquanoodle.sumorater.data.FoughtSlot
+import com.aquanoodle.sumorater.data.DaySlot
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.rememberUpdatedState
@@ -95,7 +105,14 @@ fun DetailScreen(
     onNext: (() -> Unit)? = null,
     /** Every wrestler's average score, for strength of schedule. */
     averages: Map<Int, Double> = emptyMap(),
+    /** Their torikumi days (up to your furthest rated day per basho): record, unrated bouts, absences. */
+    slots: List<DaySlot> = emptyList(),
+    picks: PickScore = PickScore(0, 0),
+    onRateMissing: (FoughtSlot) -> Unit = {},
+    /** Asks for any not-yet-cached days of this wrestler's basho to be fetched. */
+    onNeedDays: () -> Unit = {},
 ) {
+    LaunchedEffect(rikishi.id) { onNeedDays() }
     val colors = LocalSumoColors.current
     // Coming from a filtered overview, start with just the bouts that matched.
     var onlyMatching by remember(rikishi.id, matchingKeys) { mutableStateOf(matchingKeys != null) }
@@ -106,7 +123,14 @@ fun DetailScreen(
     var chartBasho by remember(rikishi.id) { mutableStateOf<String?>(null) }
     val bashoIds = remember(rikishi.list) { rikishi.list.map { it.bashoId }.distinct().sortedDescending() }
     val chartList = if (mode == ChartMode.DAY && chartBasho != null) rikishi.list.filter { it.bashoId == chartBasho } else rikishi.list
-    val chart = remember(chartList, mode) { buildChart(chartList, mode) }
+    val scopeSlots = chartBasho?.let { b -> slots.filter { it.bashoId == b } } ?: slots
+    val record = recordOf(scopeSlots)
+    // Days chart: rated bouts plus unrated ones (hollow) and fusen/absences (crosses).
+    val timeline = remember(chartList, scopeSlots) { wrestlerTimeline(chartList, scopeSlots) }
+    val chart = remember(timeline, chartList, mode) {
+        if (mode == ChartMode.DAY) buildTimelineChart(timeline) else buildChart(chartList, mode)
+    }
+    val missingCount = scopeSlots.count { s -> s is FoughtSlot && !s.fusen && !s.noDecision && s.won != null && rikishi.list.none { it.key == s.key } }
     // Point tapped in the line chart (index into the chart's points).
     var picked by remember(rikishi.id, mode, chartBasho) { mutableStateOf<Int?>(null) }
     Column(
@@ -196,6 +220,23 @@ fun DetailScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(rikishi.rank, style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, letterSpacing = 0.04f.em, color = colors.mute))
+                        if (scopeSlots.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                buildString {
+                                    append("Record ${record.text}")
+                                    if (record.absent > 0) append(" (W–L–absent)")
+                                    if (missingCount > 0) append(" · $missingCount not rated")
+                                },
+                                style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = colors.ink, fontFeatureSettings = TabularNums),
+                            )
+                        }
+                        if (picks.decided > 0) {
+                            Text(
+                                "Picks ${picks.right} / ${picks.decided} right",
+                                style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = colors.mute, fontFeatureSettings = TabularNums),
+                            )
+                        }
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
@@ -261,6 +302,8 @@ fun DetailScreen(
 
             item {
                 ChartPick(
+                    items = timeline,
+                    onRateMissing = onRateMissing,
                     list = chartList,
                     mode = mode,
                     index = picked,
@@ -312,8 +355,16 @@ fun DetailScreen(
                 )
             }
 
-            items(shown.reversed(), key = { it.key }) { entry ->
-                RatingRow(entry, onClick = { onEditEntry(entry) }, onOpponentTap = { onOpenRikishi(entry.oppId) })
+            // Unrated bouts are listed too (not while showing only search matches).
+            val listed: List<TimelineItem> =
+                if (matching != null && onlyMatching) shown.map { RatedItem(it) }
+                else wrestlerTimeline(shown, slots).filter { it !is OffItem }
+            items(listed.reversed(), key = { it.bashoId + it.day + (it as? RatedItem)?.entry?.key.orEmpty() }) { item ->
+                when (item) {
+                    is RatedItem -> RatingRow(item.entry, onClick = { onEditEntry(item.entry) }, onOpponentTap = { onOpenRikishi(item.entry.oppId) })
+                    is MissingItem -> MissingRow(item.slot, onRate = { onRateMissing(item.slot) })
+                    is OffItem -> OffRow(item)
+                }
             }
         }
     }
@@ -414,6 +465,8 @@ private fun RatingRow(entry: RikishiEntry, onClick: () -> Unit, onOpponentTap: (
 /** The bout (or basho average) behind the tapped chart point; a hint until one is tapped. */
 @Composable
 private fun ChartPick(
+    items: List<TimelineItem>,
+    onRateMissing: (FoughtSlot) -> Unit,
     list: List<RikishiEntry>,
     mode: ChartMode,
     index: Int?,
@@ -427,9 +480,12 @@ private fun ChartPick(
         return
     }
     if (mode == ChartMode.DAY) {
-        val entry = list.getOrNull(index) ?: return
         Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).border(1.dp, colors.ink)) {
-            RatingRow(entry, onClick = { onEdit(entry) }, onOpponentTap = { onOpenRikishi(entry.oppId) })
+            when (val item = items.getOrNull(index) ?: return@Box) {
+                is RatedItem -> RatingRow(item.entry, onClick = { onEdit(item.entry) }, onOpponentTap = { onOpenRikishi(item.entry.oppId) })
+                is MissingItem -> MissingRow(item.slot, onRate = { onRateMissing(item.slot) })
+                is OffItem -> OffRow(item)
+            }
         }
     } else {
         // Same grouping and order as buildChart's basho mode.
@@ -494,6 +550,49 @@ private fun TagChart(list: List<RikishiEntry>) {
                 Text("$n", modifier = Modifier.width(30.dp), textAlign = TextAlign.End, style = small)
             }
         }
+    }
+}
+
+/** A bout of theirs you haven't rated: no result shown, tap to rate it. */
+@Composable
+private fun MissingRow(slot: FoughtSlot, onRate: () -> Unit) {
+    val colors = LocalSumoColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.bg)
+            .drawBehind { drawLine(colors.line, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx()) }
+            .clickable(onClick = onRate)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("vs ${slot.oppName}", style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = colors.mute))
+            Text(
+                "${bashoLabel(slot.bashoId)} · ${dayLabel(slot.day)}",
+                style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, letterSpacing = 0.04f.em, color = colors.faint),
+            )
+        }
+        Text("NOT RATED · RATE →", style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, letterSpacing = 0.12f.em, color = colors.ink))
+    }
+}
+
+/** Fusen or absence, shown when its cross in the chart is tapped. */
+@Composable
+private fun OffRow(item: OffItem) {
+    val colors = LocalSumoColors.current
+    val what = when {
+        item.slot == null -> "Absent"
+        item.slot.won == true -> "Fusen win vs ${item.slot.oppName}"
+        item.slot.won == false -> "Fusen loss vs ${item.slot.oppName}"
+        else -> "Fusen vs ${item.slot.oppName}"
+    }
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
+        Text("× $what", style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = colors.mute))
+        Text(
+            "${bashoLabel(item.bashoId)} · ${dayLabel(item.day)}",
+            style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, letterSpacing = 0.04f.em, color = colors.faint),
+        )
     }
 }
 

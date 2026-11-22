@@ -33,6 +33,7 @@ import com.aquanoodle.sumorater.data.CsvImport
 import com.aquanoodle.sumorater.data.bestBouts
 import com.aquanoodle.sumorater.data.overviewRows
 import com.aquanoodle.sumorater.data.kimariteOptions
+import com.aquanoodle.sumorater.data.pickOutcome
 import com.aquanoodle.sumorater.data.parseRatingsCsv
 import com.aquanoodle.sumorater.ui.screens.BestScreen
 import com.aquanoodle.sumorater.data.allRatingsCsv
@@ -211,6 +212,12 @@ fun SumoRaterApp() {
                 onRemoveBout = controller::removePlayoffBout,
                 tagOwners = state.tagOwners,
                 onAssignTag = controller::assignTag,
+                pick = state.bouts.getOrNull(state.idx)?.let { state.picks[it.key] },
+                canPick = controller.canPick(),
+                pickRight = state.bouts.getOrNull(state.idx)?.let { b ->
+                    state.picks[b.key]?.let { p -> pickOutcome(p, b.key, state.ratings) { bid, d -> state.dayCaches["$bid-$d"] } }
+                },
+                onPick = controller::pick,
                 onOpenRikishi = { if (it in ratedIds) controller.openDetail(it) },
             )
 
@@ -229,6 +236,7 @@ fun SumoRaterApp() {
                 conflictDays = controller.conflictDays(state.bashoId),
                 onImportCsv = { importCsv.launch(arrayOf("text/*", "application/csv", "application/octet-stream")) },
                 onOpenBest = controller::openBest,
+                pickScore = controller.pickScore(),
                 onExportCsv = { exportCsv(allRatingsFileName(), allRatingsCsv(state.ratings)) },
                 updater = updater,
             )
@@ -279,6 +287,10 @@ fun SumoRaterApp() {
                         onOpenRikishi = { if (it in ratedIds) controller.openDetail(it) },
                         showOpponents = state.showOpponents,
                         averages = remember(state.ratings) { controller.perRikishiMap().mapValues { it.value.avgN } },
+                        slots = controller.slotsFor(aggregate.id, aggregate.list.map { it.bashoId }.distinct()),
+                        picks = controller.pickScore(aggregate.id),
+                        onRateMissing = { s -> controller.editBout(s.key, s.bashoId, s.day) },
+                        onNeedDays = { controller.ensureDays(aggregate.list.map { it.bashoId }.distinct()) },
                         position = if (at >= 0) "${at + 1} / ${listIds.size}" else null,
                         onPrev = listIds.getOrNull(at - 1)?.takeIf { at > 0 }?.let { id -> { controller.switchDetail(id) } },
                         onNext = listIds.getOrNull(at + 1)?.takeIf { at >= 0 }?.let { id -> { controller.switchDetail(id) } },

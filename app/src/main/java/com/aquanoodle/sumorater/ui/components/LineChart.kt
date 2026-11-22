@@ -20,6 +20,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.sp
 import com.aquanoodle.sumorater.data.ChartData
+import com.aquanoodle.sumorater.data.DotKind
 import com.aquanoodle.sumorater.ui.theme.Archivo
 import com.aquanoodle.sumorater.ui.theme.LocalSumoColors
 
@@ -125,9 +126,24 @@ fun BoutLineChart(
             if (i == selected) {
                 drawCircle(color = colors.ink, radius = px(7f), center = center, style = Stroke(width = px(1.5f)))
             }
-            val fill = if (d.won == false) colors.ink else colors.bg
-            drawCircle(color = fill, radius = px(3.5f), center = center)
-            drawCircle(color = colors.ink, radius = px(3.5f), center = center, style = Stroke(width = px(1.5f)))
+            when (d.kind) {
+                DotKind.RATED -> {
+                    val fill = if (d.won == false) colors.ink else colors.bg
+                    drawCircle(color = fill, radius = px(3.5f), center = center)
+                    drawCircle(color = colors.ink, radius = px(3.5f), center = center, style = Stroke(width = px(1.5f)))
+                }
+                // Fought but not rated yet: small hollow ring on the 0 line.
+                DotKind.MISSING -> {
+                    drawCircle(color = colors.bg, radius = px(3f), center = center)
+                    drawCircle(color = colors.faint, radius = px(3f), center = center, style = Stroke(width = px(1.2f)))
+                }
+                // Fusen or absent: a cross.
+                DotKind.OFF -> {
+                    val r = px(3.5f)
+                    drawLine(colors.mute, Offset(center.x - r, center.y - r), Offset(center.x + r, center.y + r), strokeWidth = px(1.6f))
+                    drawLine(colors.mute, Offset(center.x - r, center.y + r), Offset(center.x + r, center.y - r), strokeWidth = px(1.6f))
+                }
+            }
         }
 
         if (chart.first.isNotEmpty()) {

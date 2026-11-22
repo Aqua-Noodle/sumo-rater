@@ -7,6 +7,8 @@ import com.aquanoodle.sumorater.data.ChartMode
 import com.aquanoodle.sumorater.data.Rating
 import com.aquanoodle.sumorater.data.TableSort
 import com.aquanoodle.sumorater.data.Wrestler
+import com.aquanoodle.sumorater.data.Pick
+import com.aquanoodle.sumorater.data.TorikumiRow
 
 enum class Screen { START, RATE, MENU, TABLE, DETAIL, BEST }
 
@@ -38,4 +40,10 @@ data class UiState(
     val bestScope: BestScope = BestScope.BASHO,
     /** Day-15 lineups per division, offered when adding a playoff bout by hand. */
     val playoffRoster: Map<String, List<Wrestler>> = emptyMap(),
+    /** Cached torikumi by "{bashoId}-{day}", for records, missing ratings and pick results. */
+    val dayCaches: Map<String, Map<String, List<TorikumiRow>>> = emptyMap(),
+    /** Your winner picks by bout key. */
+    val picks: Map<String, Pick> = emptyMap(),
+    /** A wheel was moved on the open bout: too late to pick (the wheels hint at the winner). */
+    val wheelTouched: Boolean = false,
 )

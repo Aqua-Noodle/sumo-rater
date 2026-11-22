@@ -1,5 +1,6 @@
 package com.aquanoodle.sumorater.ui.screens
 
+import com.aquanoodle.sumorater.data.Pick
 import androidx.compose.ui.draw.drawBehind
 import com.aquanoodle.sumorater.data.tagScope
 import com.aquanoodle.sumorater.data.tagChipLabel
@@ -157,6 +158,11 @@ fun RateScreen(
     onRemoveBout: () -> Unit = {},
     tagOwners: Map<String, Set<Int>> = emptyMap(),
     onAssignTag: (tag: String, wrestlerId: Int) -> Unit = { _, _ -> },
+    /** Your pick for the open bout, whether you may still pick, and (once known) whether it was right. */
+    pick: Pick? = null,
+    canPick: Boolean = false,
+    pickRight: Boolean? = null,
+    onPick: (Int) -> Unit = {},
 ) {
     val colors = LocalSumoColors.current
     val bout = bouts.getOrNull(idx)
@@ -265,6 +271,10 @@ fun RateScreen(
                         tagOwners = tagOwners,
                         onAssignTag = onAssignTag,
                         tagDrag = tagDrag,
+                        pick = pick,
+                        canPick = canPick,
+                        pickRight = pickRight,
+                        onPick = onPick,
                     )
                     isDone -> DoneState(
                         bashoLabel = bashoLabel,
@@ -469,6 +479,51 @@ private fun EmptyState(message: String, onPickAnotherDay: () -> Unit, onAddPlayo
     }
 }
 
+/** Guess the winner before rating: one tap, final. */
+@Composable
+private fun PickRow(bout: Bout, onPick: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val colors = LocalSumoColors.current
+    Column(modifier = modifier.fillMaxWidth().padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            "PICK THE WINNER",
+            style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.18f.em, color = colors.faint),
+        )
+        Row(modifier = Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(bout.eastId to bout.eastName, bout.westId to bout.westName).forEach { (id, name) ->
+                Box(
+                    modifier = Modifier
+                        .border(1.dp, colors.ink)
+                        .clickable { onPick(id) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    Text(name, style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 13.sp, color = colors.ink))
+                }
+            }
+        }
+        Text(
+            "Before rating only · can't be changed",
+            modifier = Modifier.padding(top = 4.dp),
+            style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, color = colors.faint),
+        )
+    }
+}
+
+@Composable
+private fun PickedLine(name: String, right: Boolean?, modifier: Modifier = Modifier) {
+    val colors = LocalSumoColors.current
+    val verdict = when (right) {
+        true -> " · ✓ RIGHT"
+        false -> " · ✗ WRONG"
+        null -> ""
+    }
+    Text(
+        "YOUR PICK · ${name.uppercase()}$verdict",
+        modifier = modifier.fillMaxWidth().padding(top = 10.dp),
+        textAlign = TextAlign.Center,
+        style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 11.sp, letterSpacing = 0.14f.em, color = if (right == false) colors.faint else colors.mute),
+    )
+}
+
 /**
  * Hand-added playoff bout: you say who won (nothing is fetched, so nothing is spoiled).
  * Tapping the chosen side again clears it back to a pre-rating.
@@ -668,6 +723,10 @@ private fun BoutCard(
     tagOwners: Map<String, Set<Int>>,
     onAssignTag: (tag: String, wrestlerId: Int) -> Unit,
     tagDrag: TagDrag,
+    pick: Pick?,
+    canPick: Boolean,
+    pickRight: Boolean?,
+    onPick: (Int) -> Unit,
 ) {
     val colors = LocalSumoColors.current
     val hover = tagDrag.hoverSide()
@@ -749,6 +808,16 @@ private fun BoutCard(
                 val faintCaption = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.18f.em, color = colors.faint)
                 Text("EAST", style = faintCaption)
                 Text("WEST", style = faintCaption)
+            }
+
+            when {
+                canPick -> PickRow(bout = bout, onPick = onPick, modifier = Modifier.then(cardTransform))
+                pick != null -> PickedLine(
+                    name = if (pick.pickedId == bout.eastId) bout.eastName else bout.westName,
+                    // Same reveal rule as the kimarite: only once you've started scoring.
+                    right = pickRight.takeIf { east != null || west != null },
+                    modifier = Modifier.then(cardTransform),
+                )
             }
 
             if (bout.manual) {

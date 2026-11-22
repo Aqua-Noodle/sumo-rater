@@ -28,6 +28,27 @@ class RatingsRepository(private val context: Context) {
         val WHERE = stringPreferencesKey("sumo-rater.where.v1")
         val PHOTOS = stringPreferencesKey("sumo-rater.photos.v1")
         val MANUAL_BOUTS = stringPreferencesKey("sumo-rater.manual-bouts.v1")
+        val PICKS = stringPreferencesKey("sumo-rater.picks.v1")
+    }
+
+    /** Your winner picks, by bout key. */
+    suspend fun loadPicks(): Map<String, Pick> {
+        val raw = context.dataStore.data.first()[Keys.PICKS] ?: return emptyMap()
+        return runCatching { json.decodeFromString<Map<String, Pick>>(raw) }.getOrDefault(emptyMap())
+    }
+
+    suspend fun savePicks(picks: Map<String, Pick>) {
+        context.dataStore.edit { it[Keys.PICKS] = json.encodeToString(picks) }
+    }
+
+    /** Every cached torikumi day ("{bashoId}-{day}" -> divisions), for records and timelines. */
+    suspend fun loadAllDayCaches(): Map<String, Map<String, List<TorikumiRow>>> {
+        val prefix = "sumo-rater.cache2."
+        return context.dataStore.data.first().asMap().mapNotNull { (key, value) ->
+            if (!key.name.startsWith(prefix) || value !is String) return@mapNotNull null
+            runCatching { json.decodeFromString<Map<String, List<TorikumiRow>>>(value) }.getOrNull()
+                ?.let { key.name.removePrefix(prefix) to it }
+        }.toMap()
     }
 
     /** Playoff bouts added by hand. */
