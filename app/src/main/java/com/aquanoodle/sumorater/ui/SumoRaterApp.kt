@@ -278,6 +278,7 @@ fun SumoRaterApp() {
                         onBack = controller::navigateBack,
                         onOpenRikishi = { if (it in ratedIds) controller.openDetail(it) },
                         showOpponents = state.showOpponents,
+                        averages = remember(state.ratings) { controller.perRikishiMap().mapValues { it.value.avgN } },
                         position = if (at >= 0) "${at + 1} / ${listIds.size}" else null,
                         onPrev = listIds.getOrNull(at - 1)?.takeIf { at > 0 }?.let { id -> { controller.switchDetail(id) } },
                         onNext = listIds.getOrNull(at + 1)?.takeIf { at >= 0 }?.let { id -> { controller.switchDetail(id) } },

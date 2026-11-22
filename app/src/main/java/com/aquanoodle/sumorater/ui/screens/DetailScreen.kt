@@ -48,6 +48,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.aquanoodle.sumorater.data.kimariteLabel
 import com.aquanoodle.sumorater.data.tagCounts
+import com.aquanoodle.sumorater.data.Schedule
+import com.aquanoodle.sumorater.data.strengthOfSchedule
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -91,6 +93,8 @@ fun DetailScreen(
     position: String? = null,
     onPrev: (() -> Unit)? = null,
     onNext: (() -> Unit)? = null,
+    /** Every wrestler's average score, for strength of schedule. */
+    averages: Map<Int, Double> = emptyMap(),
 ) {
     val colors = LocalSumoColors.current
     // Coming from a filtered overview, start with just the bouts that matched.
@@ -266,6 +270,15 @@ fun DetailScreen(
             }
 
             item { RatingDistribution(rikishi.list) }
+
+            item {
+                // Same scope as the chart: the picked basho, or everything.
+                val scopeList = chartBasho?.let { b -> rikishi.list.filter { it.bashoId == b } } ?: rikishi.list
+                ScheduleBlock(
+                    schedule = strengthOfSchedule(scopeList, averages),
+                    scope = chartBasho?.let { bashoLabel(it) } ?: "All basho",
+                )
+            }
 
             item { TagChart(rikishi.list) }
 
@@ -480,6 +493,34 @@ private fun TagChart(list: List<RikishiEntry>) {
                 }
                 Text("$n", modifier = Modifier.width(30.dp), textAlign = TextAlign.End, style = small)
             }
+        }
+    }
+}
+
+/** Strength of schedule: sum of the opponents' average scores over the bouts in scope. */
+@Composable
+private fun ScheduleBlock(schedule: Schedule, scope: String) {
+    val colors = LocalSumoColors.current
+    if (schedule.counted == 0) return
+    val fmt = { v: Double -> String.format(java.util.Locale.US, "%.1f", v) }
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp)) {
+        Text(
+            "STRENGTH OF SCHEDULE · ${scope.uppercase()}",
+            style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.14f.em, color = colors.faint),
+        )
+        Row(modifier = Modifier.padding(top = 6.dp), verticalAlignment = Alignment.Bottom) {
+            Text(
+                fmt(schedule.sum),
+                style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 28.sp, letterSpacing = (-0.02f).em, color = colors.ink, fontFeatureSettings = TabularNums),
+            )
+            Text(
+                buildString {
+                    append("${schedule.counted} bout${if (schedule.counted == 1) "" else "s"} · avg opponent ${fmt(schedule.perBout)}")
+                    if (schedule.skipped > 0) append(" · ${schedule.skipped} unrated opponent${if (schedule.skipped == 1) "" else "s"} left out")
+                },
+                modifier = Modifier.padding(start = 12.dp, bottom = 5.dp),
+                style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = colors.mute, fontFeatureSettings = TabularNums),
+            )
         }
     }
 }

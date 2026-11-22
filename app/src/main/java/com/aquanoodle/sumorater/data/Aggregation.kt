@@ -163,3 +163,17 @@ fun tagCounts(list: List<RikishiEntry>): List<Pair<String, Int>> {
     val counts = list.flatMap { it.credited }.groupingBy { it }.eachCount()
     return QUICK_TAGS.mapNotNull { tag -> counts[tag]?.let { tag to it } }
 }
+
+/**
+ * Strength of schedule over [list]: the sum, bout by bout, of each opponent's average score
+ * ([averages] = every wrestler's average over all your ratings). [counted] bouts had an
+ * opponent with an average; [skipped] didn't (opponent never rated).
+ */
+data class Schedule(val sum: Double, val counted: Int, val skipped: Int) {
+    val perBout: Double get() = if (counted == 0) 0.0 else sum / counted
+}
+
+fun strengthOfSchedule(list: List<RikishiEntry>, averages: Map<Int, Double>): Schedule {
+    val opp = list.map { averages[it.oppId] }
+    return Schedule(sum = opp.filterNotNull().sum(), counted = opp.count { it != null }, skipped = opp.count { it == null })
+}
