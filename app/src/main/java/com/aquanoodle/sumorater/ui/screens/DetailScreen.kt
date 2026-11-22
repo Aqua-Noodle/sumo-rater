@@ -1,5 +1,13 @@
 package com.aquanoodle.sumorater.ui.screens
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import com.aquanoodle.sumorater.data.buildChart
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
@@ -79,6 +87,10 @@ fun DetailScreen(
     matchingKeys: Set<String>? = null,
     showOpponents: Boolean = false,
     onToggleOpponents: () -> Unit = {},
+    /** Place in the My ratings list ("3 / 42"), and its neighbours; null when not in the list. */
+    position: String? = null,
+    onPrev: (() -> Unit)? = null,
+    onNext: (() -> Unit)? = null,
 ) {
     val colors = LocalSumoColors.current
     // Coming from a filtered overview, start with just the bouts that matched.
@@ -107,10 +119,61 @@ fun DetailScreen(
                 Text("←", fontSize = 20.sp, color = colors.ink)
             }
             Spacer(modifier = Modifier.weight(1f))
+            if (position != null) {
+                val arrow = TextStyle(fontFamily = Archivo, fontSize = 18.sp, color = colors.ink)
+                IconButton(onClick = { onPrev?.invoke() }, enabled = onPrev != null, modifier = Modifier.size(40.dp)) {
+                    Text("‹", style = arrow.copy(color = if (onPrev != null) colors.ink else colors.line))
+                }
+                Text(
+                    position,
+                    style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, letterSpacing = 0.08f.em, color = colors.faint, fontFeatureSettings = TabularNums),
+                )
+                IconButton(onClick = { onNext?.invoke() }, enabled = onNext != null, modifier = Modifier.size(40.dp)) {
+                    Text("›", style = arrow.copy(color = if (onNext != null) colors.ink else colors.line))
+                }
+                Spacer(modifier = Modifier.weight(1f))
+            }
             ExportCsvButton(onClick = onExportCsv)
         }
 
-        LazyColumn(modifier = Modifier.weight(1f)) {
+        // Swipe left/right anywhere on the page for the next/previous wrestler in the list.
+        val density = LocalDensity.current
+        val threshold = with(density) { 80.dp.toPx() }
+        var dragX by remember { mutableFloatStateOf(0f) }
+        val latestPrev by rememberUpdatedState(onPrev)
+        val latestNext by rememberUpdatedState(onNext)
+        val swipe = if (onPrev == null && onNext == null) Modifier else Modifier.pointerInput(Unit) {
+            detectHorizontalDragGestures(
+                onDragEnd = {
+                    val dx = dragX
+                    dragX = 0f
+                    when {
+                        dx <= -threshold -> latestNext?.invoke()
+                        dx >= threshold -> latestPrev?.invoke()
+                    }
+                },
+                onDragCancel = { dragX = 0f },
+            ) { change, amount ->
+                change.consume()
+                dragX += amount
+            }
+        }
+
+        // A different wrestler starts at the top of their page.
+        val listState = rememberLazyListState()
+        LaunchedEffect(rikishi.id) { listState.scrollToItem(0) }
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .weight(1f)
+                .then(swipe)
+                .graphicsLayer {
+                    // Follow the finger a little (damped), so the swipe feels connected.
+                    translationX = dragX * 0.35f
+                    alpha = 1f - (kotlin.math.abs(dragX) / (threshold * 4)).coerceIn(0f, 0.4f)
+                },
+        ) {
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 16.dp),

@@ -126,7 +126,9 @@ fun overviewRows(
     val inScope = if (filter.bashoId == null) ratings else ratings.filterValues { it.bashoId == filter.bashoId }
     val current = perRikishi(inScope).mapValues { (_, agg) ->
         val latest = agg.list.last()
-        latest.rank to (rankDivision(latest.rank) ?: latest.div)
+        // A Makushita (or lower) rank belongs to neither division, even after a Juryo visit;
+        // only a missing rank falls back to the division the bout was in.
+        latest.rank to (rankDivision(latest.rank) ?: latest.div.takeIf { latest.rank.isBlank() })
     }
     val filtered = if (filter.isActive) ratings.filterValues(filter::matches) else ratings
     val rows = perRikishi(filtered).values.mapNotNull { row ->

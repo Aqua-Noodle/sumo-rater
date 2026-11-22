@@ -587,6 +587,11 @@ class SumoController(private val repo: RatingsRepository) {
         state = state.copy(screen = Screen.TABLE)
     }
 
+    /** Next/previous wrestler on the open wrestler page: same history entry, so back still returns to the list. */
+    fun switchDetail(rikishiId: Int) {
+        state = state.copy(selected = rikishiId)
+    }
+
     fun openDetail(rikishiId: Int) {
         record(Screen.DETAIL, selected = rikishiId)
         state = state.copy(screen = Screen.DETAIL, selected = rikishiId)

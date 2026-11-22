@@ -265,6 +265,11 @@ fun SumoRaterApp() {
 
             Screen.DETAIL -> {
                 val aggregate = state.selected?.let { controller.perRikishiMap()[it] }
+                // Neighbours in the My ratings list as currently filtered and sorted.
+                val listIds = remember(state.ratings, state.tableFilter, state.tableSort) {
+                    overviewRows(state.ratings, state.tableFilter, state.tableSort).map { it.id }
+                }
+                val at = aggregate?.let { listIds.indexOf(it.id) } ?: -1
                 if (aggregate != null) {
                     DetailScreen(
                         rikishi = aggregate,
@@ -273,6 +278,9 @@ fun SumoRaterApp() {
                         onBack = controller::navigateBack,
                         onOpenRikishi = { if (it in ratedIds) controller.openDetail(it) },
                         showOpponents = state.showOpponents,
+                        position = if (at >= 0) "${at + 1} / ${listIds.size}" else null,
+                        onPrev = listIds.getOrNull(at - 1)?.takeIf { at > 0 }?.let { id -> { controller.switchDetail(id) } },
+                        onNext = listIds.getOrNull(at + 1)?.takeIf { at >= 0 }?.let { id -> { controller.switchDetail(id) } },
                         onToggleOpponents = controller::toggleOpponents,
                         onModeChange = controller::setMode,
                         onPhotoTap = { requestPhoto(aggregate.id) },
