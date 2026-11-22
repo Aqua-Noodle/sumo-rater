@@ -38,6 +38,9 @@ import com.aquanoodle.sumorater.data.TorikumiRow
 import com.aquanoodle.sumorater.data.BestScope
 import com.aquanoodle.sumorater.data.BoutFilter
 import com.aquanoodle.sumorater.data.QUICK_TAGS
+import com.aquanoodle.sumorater.data.TagScope
+import com.aquanoodle.sumorater.data.nextTagOwners
+import com.aquanoodle.sumorater.data.tagScope
 import com.aquanoodle.sumorater.data.TableSort
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -306,11 +309,32 @@ class SumoController(private val repo: RatingsRepository) {
             west = saved?.let { if (eastIsWinner) it.l else it.w },
             note = saved?.note.orEmpty(),
             tags = saved?.tags.orEmpty().toSet(),
+            tagOwners = saved?.tagOwners.orEmpty().mapValues { it.value.toSet() },
         )
     }
 
+    /**
+     * Shared and bout tags switch on/off. Wrestler tags (Henka, Injury, …) cycle
+     * east → west → both → off, so one tap says whose it is.
+     */
     fun toggleTag(tag: String) {
-        state = state.copy(tags = if (tag in state.tags) state.tags - tag else state.tags + tag)
+        val bout = currentBout()
+        if (bout == null || tagScope(tag) != TagScope.WRESTLER) {
+            state = state.copy(tags = if (tag in state.tags) state.tags - tag else state.tags + tag)
+            return
+        }
+        val next = if (tag in state.tags) nextTagOwners(state.tagOwners[tag].orEmpty(), bout.eastId, bout.westId) else setOf(bout.eastId)
+        state = if (next == null) {
+            state.copy(tags = state.tags - tag, tagOwners = state.tagOwners - tag)
+        } else {
+            state.copy(tags = state.tags + tag, tagOwners = state.tagOwners + (tag to next))
+        }
+    }
+
+    /** A wrestler tag dropped onto one of the two wrestlers: it's theirs (switched on if it wasn't). */
+    fun assignTag(tag: String, wrestlerId: Int) {
+        if (tagScope(tag) != TagScope.WRESTLER) return
+        state = state.copy(tags = state.tags + tag, tagOwners = state.tagOwners + (tag to setOf(wrestlerId)))
     }
 
     fun onEastSettled(index: Int) = onSideSettled(isEast = true, index = index)
@@ -364,6 +388,9 @@ class SumoController(private val repo: RatingsRepository) {
         if (bout.canRate) {
             val note = state.note.trim().ifEmpty { null }
             val tags = QUICK_TAGS.filter { it in state.tags }
+            val tagOwners = tags.filter { tagScope(it) == TagScope.WRESTLER }.mapNotNull { tag ->
+                state.tagOwners[tag]?.filter { it == bout.eastId || it == bout.westId }?.sorted()?.takeIf { it.isNotEmpty() }?.let { tag to it }
+            }.toMap()
             if (state.east == null && state.west == null && note == null && tags.isEmpty()) {
                 ratings.remove(bout.key)
             } else {
@@ -392,6 +419,7 @@ class SumoController(private val repo: RatingsRepository) {
                     note = note,
                     kimarite = bout.kimarite.ifBlank { null },
                     tags = tags,
+                    tagOwners = tagOwners,
                     pending = pending,
                     conflict = if (keepConflict) before?.conflict else null,
                 )

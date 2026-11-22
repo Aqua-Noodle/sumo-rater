@@ -101,6 +101,8 @@ data class Rating(
     val tags: List<String> = emptyList(),
     val pending: Boolean = false,
     val conflict: String? = null,
+    /** For wrestler tags (Henka, Injury, …): which wrestler id(s) each one belongs to. */
+    val tagOwners: Map<String, List<Int>> = emptyMap(),
 ) {
     val hasScore: Boolean get() = w != null || l != null
 
@@ -109,7 +111,60 @@ data class Rating(
 }
 
 /** One-tap labels offered under every ratable bout, in display order. */
-val QUICK_TAGS = listOf("Great tachiai", "Long bout", "Close call", "Upset", "Henka", "Matta", "Monoii", "Injury", "Possible injury")
+val QUICK_TAGS = listOf(
+    "Great tachiai", "Long bout", "Close call", "Upset", "Henka",
+    "Matta", "Monoii", "Torinaoshi", "Injury", "Possible injury",
+)
+
+/** Who a tag is credited to in the per-wrestler tag chart. */
+enum class TagScope {
+    /** Both wrestlers (it took two). */
+    BOTH,
+    /** Whoever won. */
+    WINNER,
+    /** The bout itself; nobody's tally. */
+    BOUT,
+    /** One wrestler you pick (or both). */
+    WRESTLER,
+}
+
+fun tagScope(tag: String): TagScope = when (tag) {
+    "Great tachiai", "Long bout", "Close call" -> TagScope.BOTH
+    "Upset" -> TagScope.WINNER
+    "Henka", "Injury", "Possible injury" -> TagScope.WRESTLER
+    else -> TagScope.BOUT
+}
+
+/** Tags of [r] that count for wrestler [id]: shared ones, Upset for the winner, and wrestler tags assigned to them. */
+fun creditedTags(r: Rating, id: Int): List<String> = r.tags.filter { tag ->
+    when (tagScope(tag)) {
+        TagScope.BOTH -> true
+        TagScope.WINNER -> !r.pending && r.winnerId == id
+        TagScope.BOUT -> false
+        TagScope.WRESTLER -> id in r.tagOwners[tag].orEmpty()
+    }
+}
+
+/** Chip text: wrestler tags show whose they are ("Henka · Onosato", "· both", "· ?" when not yet assigned). */
+fun tagChipLabel(tag: String, owners: Collection<Int>?, eastId: Int, eastName: String, westId: Int, westName: String, selected: Boolean): String {
+    if (!selected || tagScope(tag) != TagScope.WRESTLER) return tag
+    val who = owners.orEmpty().filter { it == eastId || it == westId }
+    return when {
+        who.size >= 2 -> "$tag · both"
+        who.singleOrNull() == eastId -> "$tag · $eastName"
+        who.singleOrNull() == westId -> "$tag · $westName"
+        else -> "$tag · ?"
+    }
+}
+
+/** Tap cycle for a wrestler tag: off → east → west → both → off. */
+fun nextTagOwners(current: Set<Int>?, eastId: Int, westId: Int): Set<Int>? = when (current?.filter { it == eastId || it == westId }?.toSet()) {
+    null -> setOf(eastId)
+    setOf(eastId) -> setOf(westId)
+    setOf(westId) -> setOf(eastId, westId)
+    setOf(eastId, westId) -> null
+    else -> setOf(eastId) // selected but unassigned
+}
 
 /** "yorikiri" -> "Yorikiri" */
 fun kimariteLabel(k: String?): String? = k?.trim()?.takeIf { it.isNotEmpty() }?.replaceFirstChar { it.uppercaseChar() }
@@ -133,6 +188,8 @@ data class RikishiEntry(
     val note: String?,
     val kimarite: String?,
     val tags: List<String>,
+    /** The tags that count for this wrestler (see [creditedTags]). */
+    val credited: List<String> = emptyList(),
 )
 
 data class RikishiAggregate(

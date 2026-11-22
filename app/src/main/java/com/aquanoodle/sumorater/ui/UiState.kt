@@ -17,6 +17,8 @@ data class UiState(
     val west: Int? = null,
     val note: String = "",
     val tags: Set<String> = emptySet(),
+    /** Wrestler tags' owners (wrestler ids) for the open bout. */
+    val tagOwners: Map<String, Set<Int>> = emptyMap(),
     val ratings: Map<String, Rating> = emptyMap(),
     val bouts: List<Bout> = emptyList(),
     val bashoId: String = "",

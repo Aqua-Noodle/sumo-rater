@@ -209,6 +209,8 @@ fun SumoRaterApp() {
                 onAddPlayoff = controller::addPlayoffBout,
                 onSetWinner = controller::setPlayoffWinner,
                 onRemoveBout = controller::removePlayoffBout,
+                tagOwners = state.tagOwners,
+                onAssignTag = controller::assignTag,
                 onOpenRikishi = { if (it in ratedIds) controller.openDetail(it) },
             )
 

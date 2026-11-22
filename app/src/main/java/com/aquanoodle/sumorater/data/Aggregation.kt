@@ -16,6 +16,7 @@ fun perRikishi(ratings: Map<String, Rating>): Map<Int, RikishiAggregate> {
                 key = key, bashoId = r.bashoId, day = r.day, div = r.div,
                 oppId = oppId, opp = opp, won = won, rating = rating, rank = rank,
                 note = r.note, kimarite = r.kimarite, tags = r.tags,
+                credited = creditedTags(r, id),
             )
         )
     }
@@ -153,3 +154,9 @@ fun bestBouts(ratings: Map<String, Rating>, scope: BestScope, bashoId: String, d
         }
         .sortedWith(compareByDescending<Map.Entry<String, Rating>> { it.value.total }.thenByDescending { it.value.ts })
         .map { it.key to it.value }
+
+/** How often each tag counts for a wrestler across [list], in tag order; tags never credited are left out. */
+fun tagCounts(list: List<RikishiEntry>): List<Pair<String, Int>> {
+    val counts = list.flatMap { it.credited }.groupingBy { it }.eachCount()
+    return QUICK_TAGS.mapNotNull { tag -> counts[tag]?.let { tag to it } }
+}

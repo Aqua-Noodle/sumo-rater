@@ -36,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.aquanoodle.sumorater.data.kimariteLabel
+import com.aquanoodle.sumorater.data.tagCounts
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -171,6 +172,8 @@ fun DetailScreen(
             }
 
             item { RatingDistribution(rikishi.list) }
+
+            item { TagChart(rikishi.list) }
 
             item {
                 HeadToHead(
@@ -350,6 +353,47 @@ private fun ChartPick(
                 )
             }
             Text(avg, style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, color = colors.ink, fontFeatureSettings = TabularNums))
+        }
+    }
+}
+
+/**
+ * Tags credited to this wrestler: shared ones (tachiai, long bout, close call), Upset when
+ * they won, and Henka/Injury when assigned to them. Matta, Monoii, Torinaoshi aren't anyone's.
+ */
+@Composable
+private fun TagChart(list: List<RikishiEntry>) {
+    val colors = LocalSumoColors.current
+    val counts = tagCounts(list)
+    if (counts.isEmpty()) return
+    val max = counts.maxOf { it.second }.coerceAtLeast(1)
+    val small = TextStyle(fontFamily = Archivo, fontSize = 11.sp, color = colors.faint, fontFeatureSettings = TabularNums)
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp)) {
+        Text(
+            "TAGS",
+            style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.14f.em, color = colors.faint),
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        counts.forEach { (tag, n) ->
+            Row(modifier = Modifier.fillMaxWidth().height(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    tag,
+                    modifier = Modifier.width(104.dp),
+                    maxLines = 1,
+                    style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = colors.ink),
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(start = 8.dp)
+                        .drawBehind { drawLine(colors.line, Offset(0f, 0f), Offset(0f, size.height), strokeWidth = 1.dp.toPx()) }
+                        .padding(vertical = 4.dp),
+                ) {
+                    Box(modifier = Modifier.fillMaxWidth(n.toFloat() / max).fillMaxHeight().background(colors.ink))
+                }
+                Text("$n", modifier = Modifier.width(30.dp), textAlign = TextAlign.End, style = small)
+            }
         }
     }
 }

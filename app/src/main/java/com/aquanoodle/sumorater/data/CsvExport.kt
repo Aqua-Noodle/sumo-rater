@@ -28,6 +28,8 @@ fun allRatingsCsv(ratings: Map<String, Rating>): String {
                 "kimarite", "tags", "note", "rated_at",
                 // Pre-ratings: result not out yet, winner_* = east and loser_* = west.
                 "result_pending", "conflict",
+                // Wrestler tags' owners by id, e.g. "Henka:12; Injury:12,34".
+                "tag_owners",
             )
         )
         rows.forEach { r ->
@@ -39,6 +41,7 @@ fun allRatingsCsv(ratings: Map<String, Rating>): String {
                     r.kimarite, r.tags.joinToString(TAG_SEPARATOR),
                     r.note, if (r.ts > 0) Instant.ofEpochMilli(r.ts).toString() else "",
                     if (r.pending) "yes" else "", r.conflict,
+                    r.tagOwners.entries.joinToString(TAG_SEPARATOR) { (tag, ids) -> "$tag:${ids.joinToString(",")}" },
                 )
             )
         }
@@ -114,6 +117,13 @@ sealed interface CsvImport {
 }
 
 /** Reads a file written by [allRatingsCsv]. */
+private fun parseTagOwners(field: String): Map<String, List<Int>> =
+    field.split(";").mapNotNull { part ->
+        val tag = part.substringBefore(":", "").trim()
+        val ids = part.substringAfter(":", "").split(",").mapNotNull { it.trim().toIntOrNull() }
+        if (tag.isEmpty() || ids.isEmpty()) null else tag to ids
+    }.toMap()
+
 fun parseRatingsCsv(text: String): CsvImport {
     val rows = parseCsv(text)
     if (rows.isEmpty()) return CsvImport.Error("The file is empty.")
@@ -157,6 +167,7 @@ fun parseRatingsCsv(text: String): CsvImport {
             tags = get("tags").split(";").map { it.trim() }.filter { it.isNotEmpty() },
             pending = get("result_pending").equals("yes", ignoreCase = true),
             conflict = get("conflict").ifEmpty { null },
+            tagOwners = parseTagOwners(get("tag_owners")),
         )
     }
     return CsvImport.Ok(out, skipped)

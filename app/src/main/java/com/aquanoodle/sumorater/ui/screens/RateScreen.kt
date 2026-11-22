@@ -1,5 +1,20 @@
 package com.aquanoodle.sumorater.ui.screens
 
+import androidx.compose.ui.draw.drawBehind
+import com.aquanoodle.sumorater.data.tagScope
+import com.aquanoodle.sumorater.data.tagChipLabel
+import com.aquanoodle.sumorater.data.TagScope
+import kotlin.math.roundToInt
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.AlertDialog
@@ -140,6 +155,8 @@ fun RateScreen(
     onAddPlayoff: (div: String, east: Wrestler, west: Wrestler) -> Unit = { _, _, _ -> },
     onSetWinner: (Int?) -> Unit = {},
     onRemoveBout: () -> Unit = {},
+    tagOwners: Map<String, Set<Int>> = emptyMap(),
+    onAssignTag: (tag: String, wrestlerId: Int) -> Unit = { _, _ -> },
 ) {
     val colors = LocalSumoColors.current
     val bout = bouts.getOrNull(idx)
@@ -164,6 +181,8 @@ fun RateScreen(
         "$bashoLabel · ${dayLabel(day)}".uppercase()
     }
 
+    val tagDrag = remember { TagDrag() }
+    Box(modifier = Modifier.fillMaxSize().onGloballyPositioned { tagDrag.rootOrigin = it.positionInRoot() }) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -243,6 +262,9 @@ fun RateScreen(
                         onAddPlayoff = openAddPlayoff,
                         onSetWinner = onSetWinner,
                         onRemoveBout = onRemoveBout,
+                        tagOwners = tagOwners,
+                        onAssignTag = onAssignTag,
+                        tagDrag = tagDrag,
                     )
                     isDone -> DoneState(
                         bashoLabel = bashoLabel,
@@ -298,6 +320,9 @@ fun RateScreen(
                 )
             }
         }
+    }
+    // The tag being dragged, following the finger.
+    TagDragGhost(tagDrag)
     }
 }
 
@@ -640,8 +665,12 @@ private fun BoutCard(
     onAddPlayoff: (() -> Unit)?,
     onSetWinner: (Int?) -> Unit,
     onRemoveBout: () -> Unit,
+    tagOwners: Map<String, Set<Int>>,
+    onAssignTag: (tag: String, wrestlerId: Int) -> Unit,
+    tagDrag: TagDrag,
 ) {
     val colors = LocalSumoColors.current
+    val hover = tagDrag.hoverSide()
     Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp)) {
         Box(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -656,6 +685,8 @@ private fun BoutCard(
                     name = bout.eastName, rank = bout.eastRank, photoPath = photos[bout.eastId],
                     onPhotoTap = { onPhotoTap(bout.eastId) },
                     onNameTap = if (bout.eastId in ratedIds) ({ onOpenRikishi(bout.eastId) }) else null,
+                    dropState = if (tagDrag.active) (if (hover == 0) DropState.HOVER else DropState.READY) else DropState.NONE,
+                    onBounds = { tagDrag.east = it },
                 )
 
                 if (bout.canRate) {
@@ -697,6 +728,8 @@ private fun BoutCard(
                     name = bout.westName, rank = bout.westRank, photoPath = photos[bout.westId],
                     onPhotoTap = { onPhotoTap(bout.westId) },
                     onNameTap = if (bout.westId in ratedIds) ({ onOpenRikishi(bout.westId) }) else null,
+                    dropState = if (tagDrag.active) (if (hover == 1) DropState.HOVER else DropState.READY) else DropState.NONE,
+                    onBounds = { tagDrag.west = it },
                 )
             }
         }
@@ -745,7 +778,15 @@ private fun BoutCard(
                 )
             }
 
-            TagChips(selected = tags, onToggle = onToggleTag, modifier = Modifier.then(cardTransform))
+            TagChips(
+                bout = bout,
+                selected = tags,
+                owners = tagOwners,
+                onToggle = onToggleTag,
+                drag = tagDrag,
+                onDrop = { tag, side -> onAssignTag(tag, if (side == 0) bout.eastId else bout.westId) },
+                modifier = Modifier.then(cardTransform),
+            )
 
             key(bout.key) {
                 NotesSection(note = note, onNoteChange = onNoteChange, modifier = Modifier.then(cardTransform))
@@ -819,26 +860,126 @@ private fun UnratableMiddle(reason: String) {
 /** One-tap labels for the bout; quicker than typing a note during a live day. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TagChips(selected: Set<String>, onToggle: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun TagChips(
+    bout: Bout,
+    selected: Set<String>,
+    owners: Map<String, Set<Int>>,
+    onToggle: (String) -> Unit,
+    drag: TagDrag,
+    onDrop: (tag: String, side: Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val colors = LocalSumoColors.current
-    FlowRow(
-        modifier = modifier.fillMaxWidth().padding(top = 16.dp, start = 8.dp, end = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        QUICK_TAGS.forEach { tag ->
-            val on = tag in selected
-            Box(
-                modifier = Modifier
-                    .border(1.dp, if (on) colors.ink else colors.line)
-                    .background(if (on) colors.ink else colors.bg)
-                    .clickable { onToggle(tag) }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-            ) {
-                Text(tag, style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = if (on) colors.bg else colors.ink))
+    val haptics = LocalHapticFeedback.current
+    Column(modifier = modifier.fillMaxWidth().padding(top = 16.dp, start = 8.dp, end = 8.dp)) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            QUICK_TAGS.forEach { tag ->
+                val on = tag in selected
+                val perWrestler = tagScope(tag) == TagScope.WRESTLER
+                val origin = remember { OffsetRef() }
+                val label = tagChipLabel(tag, owners[tag], bout.eastId, bout.eastName, bout.westId, bout.westName, on)
+                Box(
+                    modifier = Modifier
+                        .onGloballyPositioned { origin.value = it.positionInRoot() }
+                        .then(
+                            // Hold, then drag a wrestler tag onto the wrestler it belongs to.
+                            if (perWrestler) Modifier.pointerInput(tag) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { at ->
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        drag.start(tag, origin.value + at)
+                                    },
+                                    onDrag = { change, amount -> change.consume(); drag.move(amount) },
+                                    onDragEnd = { drag.end()?.let { (t, side) -> onDrop(t, side) } },
+                                    onDragCancel = { drag.cancel() },
+                                )
+                            } else Modifier
+                        )
+                        .border(1.dp, if (on) colors.ink else colors.line)
+                        .background(if (on) colors.ink else colors.bg)
+                        .clickable { onToggle(tag) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(label, style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = if (on) colors.bg else colors.ink))
+                }
             }
         }
+        // Only once it matters: a wrestler tag is on.
+        if (selected.any { tagScope(it) == TagScope.WRESTLER }) Text(
+            "Henka & injury: tap again to switch wrestler, or hold and drag onto one.",
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            textAlign = TextAlign.Center,
+            style = TextStyle(fontFamily = Archivo, fontSize = 11.sp, color = colors.faint),
+        )
     }
+}
+
+private class OffsetRef(var value: Offset = Offset.Zero)
+
+private enum class DropState { NONE, READY, HOVER }
+
+/** A wrestler tag being dragged: where the finger is and where the two wrestlers sit (root coordinates). */
+@Stable
+private class TagDrag {
+    var tag by mutableStateOf<String?>(null)
+        private set
+    var pointer by mutableStateOf(Offset.Zero)
+        private set
+    var rootOrigin = Offset.Zero
+    var east = Rect.Zero
+    var west = Rect.Zero
+
+    val active: Boolean get() = tag != null
+
+    fun start(t: String, at: Offset) {
+        pointer = at
+        tag = t
+    }
+
+    fun move(by: Offset) {
+        pointer += by
+    }
+
+    /** 0 = over east, 1 = over west, null = neither. */
+    fun hoverSide(): Int? = when {
+        tag == null -> null
+        east.contains(pointer) -> 0
+        west.contains(pointer) -> 1
+        else -> null
+    }
+
+    fun end(): Pair<String, Int>? {
+        val t = tag ?: return null
+        val side = hoverSide()
+        tag = null
+        return side?.let { t to it }
+    }
+
+    fun cancel() {
+        tag = null
+    }
+}
+
+@Composable
+private fun TagDragGhost(drag: TagDrag) {
+    val colors = LocalSumoColors.current
+    val tag = drag.tag ?: return
+    Text(
+        tag,
+        modifier = Modifier
+            .offset {
+                // Float above the finger so it stays visible.
+                val p = drag.pointer - drag.rootOrigin
+                IntOffset((p.x - 40.dp.toPx()).roundToInt(), (p.y - 56.dp.toPx()).roundToInt())
+            }
+            .background(colors.ink)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 13.sp, color = colors.bg),
+    )
 }
 
 /** Collapsed by default; opens automatically when the bout already has a note. */
@@ -885,12 +1026,34 @@ private fun NotesSection(note: String, onNoteChange: (String) -> Unit, modifier:
 }
 
 @Composable
-private fun RikishiColumn(name: String, rank: String, photoPath: String?, onPhotoTap: () -> Unit, onNameTap: (() -> Unit)?) {
+private fun RikishiColumn(
+    name: String,
+    rank: String,
+    photoPath: String?,
+    onPhotoTap: () -> Unit,
+    onNameTap: (() -> Unit)?,
+    dropState: DropState = DropState.NONE,
+    onBounds: (Rect) -> Unit = {},
+) {
     val colors = LocalSumoColors.current
     Column(
         modifier = Modifier
             .width(104.dp)
-            .padding(top = PHOTO_TOP_OFFSET_DP.dp),
+            .padding(top = PHOTO_TOP_OFFSET_DP.dp)
+            // Drop target for dragged wrestler tags (photo + name).
+            .onGloballyPositioned { onBounds(it.boundsInRoot()) }
+            // Outline drawn outside the layout so the photo stays lined up with the wheels.
+            .drawBehind {
+                if (dropState != DropState.NONE) {
+                    val inset = 4.dp.toPx()
+                    drawRect(
+                        color = if (dropState == DropState.HOVER) colors.ink else colors.line,
+                        topLeft = Offset(-inset, -inset),
+                        size = androidx.compose.ui.geometry.Size(size.width + 2 * inset, size.height + 2 * inset),
+                        style = Stroke(width = (if (dropState == DropState.HOVER) 2.dp else 1.dp).toPx()),
+                    )
+                }
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         RikishiPhoto(

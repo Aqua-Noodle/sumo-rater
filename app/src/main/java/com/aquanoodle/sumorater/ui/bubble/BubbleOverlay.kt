@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import com.aquanoodle.sumorater.data.QUICK_TAGS
+import com.aquanoodle.sumorater.data.tagChipLabel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -223,7 +224,7 @@ private fun RatingPanel(
             )
         }
 
-        if (canTag && showTags) TagChips(selected = state.tags, onToggle = controller::toggleTag)
+        if (canTag && showTags && bout != null) TagChips(bout = bout, selected = state.tags, owners = state.tagOwners, onToggle = controller::toggleTag)
 
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
@@ -304,7 +305,7 @@ private fun NameColumn(name: String, rank: String) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TagChips(selected: Set<String>, onToggle: (String) -> Unit) {
+private fun TagChips(bout: Bout, selected: Set<String>, owners: Map<String, Set<Int>>, onToggle: (String) -> Unit) {
     val colors = LocalSumoColors.current
     FlowRow(
         modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp),
@@ -320,7 +321,11 @@ private fun TagChips(selected: Set<String>, onToggle: (String) -> Unit) {
                     .clickable { onToggle(tag) }
                     .padding(horizontal = 9.dp, vertical = 6.dp),
             ) {
-                Text(tag, style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = if (on) colors.bg else colors.ink))
+                // Wrestler tags cycle east → west → both → off on each tap.
+                Text(
+                    tagChipLabel(tag, owners[tag], bout.eastId, bout.eastName, bout.westId, bout.westName, on),
+                    style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = if (on) colors.bg else colors.ink),
+                )
             }
         }
     }
