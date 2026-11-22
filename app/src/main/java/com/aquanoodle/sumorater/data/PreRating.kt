@@ -12,8 +12,37 @@ fun scoreConflict(winnerName: String, loserName: String, w: Int?, l: Int?): Stri
 }
 
 /**
+ * A rating whose scores contradict the result loses the offending score: the loser's when
+ * it isn't below the winner's, the winner's when it is 0. [Rating.conflict] says what
+ * happened and keeps the bout marked until it's rated again. Consistent ratings pass through.
+ */
+fun clearConflict(r: Rating): Rating {
+    val reason = scoreConflict(r.winnerName, r.loserName, r.w, r.l) ?: return r
+    return if (r.w == 0) {
+        r.copy(w = null, conflict = "$reason That score was cleared.")
+    } else {
+        r.copy(l = null, conflict = "$reason ${r.loserName}'s score was cleared.")
+    }
+}
+
+/** True when nothing is left worth keeping (no score, note or tag). */
+val Rating.isBlankRating: Boolean get() = !hasScore && note.isNullOrBlank() && tags.isEmpty()
+
+/**
+ * Upgrades conflicts saved by the first pre-rating version (scores kept as they were) to
+ * the cleared form; fusen/no-decision ones simply lose their scores.
+ */
+fun migrateConflict(r: Rating): Rating = when {
+    r.conflict == null -> r
+    r.conflict?.startsWith("Result:") == true -> r.copy(w = null, l = null, conflict = null)
+    scoreConflict(r.winnerName, r.loserName, r.w, r.l) != null -> clearConflict(r.copy(conflict = null))
+    else -> r
+}
+
+/**
  * Turns a pre-rating into a normal rating once [bout]'s result is out: scores move from
- * east/west to winner/loser and any contradiction is flagged in [Rating.conflict].
+ * east/west to winner/loser, and a score that contradicts the result is cleared (see
+ * [clearConflict]). On a fusen/no-decision bout the scores are dropped; notes and tags stay.
  * Returns null while the result is still missing (or [r] isn't a pre-rating).
  */
 fun resolvePreRating(r: Rating, bout: Bout): Rating? {
@@ -34,11 +63,6 @@ fun resolvePreRating(r: Rating, bout: Bout): Rating? {
         kimarite = bout.kimarite.ifBlank { null },
         pending = false,
     )
-    val reason = bout.unratableReason
-    val conflict = if (reason != null) {
-        if (oriented.hasScore) "Result: ${reason.lowercase()}, so this bout can't be rated." else null
-    } else {
-        scoreConflict(oriented.winnerName, oriented.loserName, oriented.w, oriented.l)
-    }
-    return oriented.copy(conflict = conflict)
+    if (bout.unratableReason != null) return oriented.copy(w = null, l = null, conflict = null)
+    return clearConflict(oriented.copy(conflict = null))
 }

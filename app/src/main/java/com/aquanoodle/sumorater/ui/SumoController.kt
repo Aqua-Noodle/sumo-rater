@@ -18,7 +18,8 @@ import com.aquanoodle.sumorater.data.currentBashoDay
 import com.aquanoodle.sumorater.data.perRikishi
 import com.aquanoodle.sumorater.data.ratingKey
 import com.aquanoodle.sumorater.data.resolvePreRating
-import com.aquanoodle.sumorater.data.scoreConflict
+import com.aquanoodle.sumorater.data.isBlankRating
+import com.aquanoodle.sumorater.data.migrateConflict
 import com.aquanoodle.sumorater.data.toBouts
 import com.aquanoodle.sumorater.data.toTorikumiRow
 import kotlinx.coroutines.CoroutineScope
@@ -81,8 +82,8 @@ class SumoController(private val repo: RatingsRepository) {
             val stored = repo.loadRatings()
             // Ratings used to be keyed by list position; re-key by the two wrestlers
             // so they stay attached to the right bout now that the list changed.
-            val ratings = stored.values.associateBy { ratingKey(it) }
-            if (ratings.keys != stored.keys) repo.saveRatings(ratings)
+            val ratings = stored.values.map(::migrateConflict).filter { !it.isBlankRating }.associateBy { ratingKey(it) }
+            if (ratings != stored) repo.saveRatings(ratings)
             pos = repo.loadPos().toMutableMap()
             val theme = repo.loadTheme()
             val where = repo.loadWhere() ?: currentBashoDay().let { WhereState(it.bashoId, it.day) }
@@ -165,7 +166,8 @@ class SumoController(private val repo: RatingsRepository) {
             resolvePreRating(r, b)?.let { b.key to it }
         }
         if (resolved.isEmpty()) return 0
-        val ratings = state.ratings + resolved
+        // A fusen bout pre-rated with scores only leaves nothing behind.
+        val ratings = (state.ratings + resolved).filterValues { !it.isBlankRating }
         state = state.copy(ratings = ratings)
         scope.launch { repo.saveRatings(ratings) }
         return resolved.count { it.second.conflict != null }
@@ -318,6 +320,10 @@ class SumoController(private val repo: RatingsRepository) {
                 val eastWon = pending || bout.winnerId == bout.eastId
                 val w = if (eastWon) state.east else state.west
                 val l = if (eastWon) state.west else state.east
+                // A conflict stays marked until its scores are actually changed, so paging
+                // past a bout doesn't silently clear it.
+                val before = ratings[bout.key]
+                val keepConflict = !pending && before?.conflict != null && before.w == w && before.l == l
                 val updated = Rating(
                     bashoId = bout.bashoId,
                     day = bout.day,
@@ -335,11 +341,7 @@ class SumoController(private val repo: RatingsRepository) {
                     kimarite = bout.kimarite.ifBlank { null },
                     tags = tags,
                     pending = pending,
-                    conflict = if (pending) null else scoreConflict(
-                        if (eastWon) bout.eastName else bout.westName,
-                        if (eastWon) bout.westName else bout.eastName,
-                        w, l,
-                    ),
+                    conflict = if (keepConflict) before?.conflict else null,
                 )
                 val existing = ratings[bout.key]
                 // Paging past an unchanged bout shouldn't bump its timestamp.
@@ -355,16 +357,6 @@ class SumoController(private val repo: RatingsRepository) {
             repo.savePos(posSnapshot)
         }
         state = state.copy(ratings = ratings, idx = nextIdx)
-        loadBout()
-    }
-
-    /** Removes the saved rating of the current bout (a pre-rated bout that turned out fusen etc.). */
-    fun discardCurrent() {
-        val bout = currentBout() ?: return
-        if (bout.key !in state.ratings) return
-        val ratings = state.ratings - bout.key
-        state = state.copy(ratings = ratings)
-        scope.launch { repo.saveRatings(ratings) }
         loadBout()
     }
 

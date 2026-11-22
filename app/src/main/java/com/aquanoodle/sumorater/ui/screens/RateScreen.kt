@@ -130,7 +130,6 @@ fun RateScreen(
     conflict: String? = null,
     conflictsToday: Int = 0,
     onNextConflict: () -> Unit = {},
-    onDiscard: () -> Unit = {},
 ) {
     val colors = LocalSumoColors.current
     val bout = bouts.getOrNull(idx)
@@ -221,7 +220,6 @@ fun RateScreen(
                         ratedIds = ratedIds,
                         onOpenRikishi = onOpenRikishi,
                         conflict = conflict,
-                        onDiscard = onDiscard,
                     )
                     isDone -> DoneState(
                         bashoLabel = bashoLabel,
@@ -481,7 +479,6 @@ private fun BoutCard(
     ratedIds: Set<Int>,
     onOpenRikishi: (Int) -> Unit,
     conflict: String?,
-    onDiscard: () -> Unit,
 ) {
     val colors = LocalSumoColors.current
     Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp)) {
@@ -544,7 +541,7 @@ private fun BoutCard(
         }
 
         if (conflict != null) {
-            ConflictNotice(text = conflict, canEdit = bout.canRate, onDiscard = onDiscard, modifier = Modifier.then(cardTransform))
+            ConflictNotice(text = conflict, modifier = Modifier.then(cardTransform))
         }
 
         if (bout.canRate) {
@@ -592,15 +589,15 @@ private fun BoutCard(
     }
 }
 
-/** A pre-rating that contradicts the result: what's wrong, how to fix it, or discard it. */
+/** A pre-rating that contradicted the result: what was cleared and that it needs a new score. */
 @Composable
-private fun ConflictNotice(text: String, canEdit: Boolean, onDiscard: () -> Unit, modifier: Modifier = Modifier) {
+private fun ConflictNotice(text: String, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)
             .border(1.dp, ConflictRed)
-            .padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 2.dp),
+            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(ConflictRed))
@@ -611,13 +608,10 @@ private fun ConflictNotice(text: String, canEdit: Boolean, onDiscard: () -> Unit
             )
         }
         Text(
-            text + if (canEdit) " Adjust the scores and tap Next." else "",
-            modifier = Modifier.padding(top = 6.dp, end = 8.dp),
+            "$text Rate it again and tap Next.",
+            modifier = Modifier.padding(top = 6.dp),
             style = TextStyle(fontFamily = Archivo, fontSize = 13.sp, lineHeight = 18.sp, color = LocalSumoColors.current.ink),
         )
-        TextButton(onClick = onDiscard, modifier = Modifier.align(Alignment.End)) {
-            Text("Discard rating", style = TextStyle(fontFamily = Archivo, fontSize = 12.sp, color = ConflictRed))
-        }
     }
 }
 
