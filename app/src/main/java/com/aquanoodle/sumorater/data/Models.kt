@@ -112,7 +112,7 @@ data class Rating(
 
 /** One-tap labels offered under every ratable bout, in display order. */
 val QUICK_TAGS = listOf(
-    "Great tachiai", "Long bout", "Close call", "Upset", "Henka",
+    "Great tachiai", "Long bout", "Close call", "Upset", "Rare technique", "Henka",
     "Matta", "Monoii", "Torinaoshi", "Injury", "Possible injury",
 )
 
@@ -130,7 +130,8 @@ enum class TagScope {
 
 fun tagScope(tag: String): TagScope = when (tag) {
     "Great tachiai", "Long bout", "Close call" -> TagScope.BOTH
-    "Upset" -> TagScope.WINNER
+    // The kimarite is the winner's technique.
+    "Upset", "Rare technique" -> TagScope.WINNER
     "Henka", "Injury", "Possible injury" -> TagScope.WRESTLER
     else -> TagScope.BOUT
 }
