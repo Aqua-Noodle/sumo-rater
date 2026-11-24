@@ -19,6 +19,7 @@ import com.aquanoodle.sumorater.data.resolvePreRating
 import com.aquanoodle.sumorater.data.isBlankRating
 import com.aquanoodle.sumorater.data.migrateConflict
 import com.aquanoodle.sumorater.data.toBouts
+import com.aquanoodle.sumorater.data.makuuchiStart
 import com.aquanoodle.sumorater.data.DaySlot
 import com.aquanoodle.sumorater.data.Pick
 import com.aquanoodle.sumorater.data.PickScore
@@ -573,6 +574,24 @@ class SumoController(private val repo: RatingsRepository) {
         if (state.idx <= 0) return
         state = state.copy(idx = state.idx - 1)
         loadBout()
+    }
+
+    /** Saves whatever is entered on the open bout, then jumps to the first Makuuchi bout of the day. */
+    fun jumpToMakuuchi() {
+        val target = makuuchiStart(state.bouts) ?: return
+        val bout = currentBout()
+        if (bout != null) {
+            val ratings = state.ratings.toMutableMap()
+            commit(bout, ratings)
+            if (ratings != state.ratings) {
+                state = state.copy(ratings = ratings)
+                scope.launch { repo.saveRatings(ratings) }
+            }
+        }
+        pos[cacheKey()] = target
+        val posSnapshot = pos.toMap()
+        scope.launch { repo.savePos(posSnapshot) }
+        jumpTo(target)
     }
 
     fun jumpTo(index: Int) {

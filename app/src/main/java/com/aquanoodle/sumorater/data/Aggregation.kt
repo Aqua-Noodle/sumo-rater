@@ -177,3 +177,8 @@ fun strengthOfSchedule(list: List<RikishiEntry>, averages: Map<Int, Double>): Sc
     val opp = list.map { averages[it.oppId] }
     return Schedule(sum = opp.filterNotNull().sum(), counted = opp.count { it != null }, skipped = opp.count { it == null })
 }
+
+/** Index of the day's first bout with a Makuuchi-ranked wrestler (also when facing a Juryo visitor), or null. */
+fun makuuchiStart(bouts: List<Bout>): Int? =
+    bouts.indexOfFirst { rankDivision(it.eastRank) == "Makuuchi" || rankDivision(it.westRank) == "Makuuchi" }
+        .takeIf { it >= 0 }

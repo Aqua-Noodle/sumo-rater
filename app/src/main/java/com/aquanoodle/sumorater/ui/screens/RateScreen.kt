@@ -163,6 +163,9 @@ fun RateScreen(
     canPick: Boolean = false,
     pickRight: Boolean? = null,
     onPick: (Int) -> Unit = {},
+    /** First Makuuchi bout of the day (null if none), for the "Jump to Makuuchi" shortcut. */
+    makuuchiStart: Int? = null,
+    onJumpMakuuchi: () -> Unit = {},
 ) {
     val colors = LocalSumoColors.current
     val bout = bouts.getOrNull(idx)
@@ -317,6 +320,18 @@ fun RateScreen(
                 )
             } else {
                 Spacer(modifier = Modifier.size(48.dp))
+            }
+            // Still in the Juryo part of the day: skip ahead to the top division.
+            if (bout != null && makuuchiStart != null && idx < makuuchiStart) {
+                Text(
+                    text = "Jump to Makuuchi ⤓",
+                    modifier = Modifier
+                        .sizeIn(minHeight = 48.dp)
+                        .clickable(onClick = onJumpMakuuchi)
+                        .wrapContentSize(Alignment.Center)
+                        .padding(horizontal = 8.dp),
+                    style = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.Medium, fontSize = 13.sp, color = colors.mute),
+                )
             }
             if (bout != null) {
                 Text(

@@ -34,6 +34,7 @@ import com.aquanoodle.sumorater.data.bestBouts
 import com.aquanoodle.sumorater.data.overviewRows
 import com.aquanoodle.sumorater.data.kimariteOptions
 import com.aquanoodle.sumorater.data.pickOutcome
+import com.aquanoodle.sumorater.data.makuuchiStart
 import com.aquanoodle.sumorater.data.parseRatingsCsv
 import com.aquanoodle.sumorater.ui.screens.BestScreen
 import com.aquanoodle.sumorater.data.allRatingsCsv
@@ -218,6 +219,8 @@ fun SumoRaterApp() {
                     state.picks[b.key]?.let { p -> pickOutcome(p, b.key, state.ratings) { bid, d -> state.dayCaches["$bid-$d"] } }
                 },
                 onPick = controller::pick,
+                makuuchiStart = makuuchiStart(state.bouts),
+                onJumpMakuuchi = controller::jumpToMakuuchi,
                 onOpenRikishi = { if (it in ratedIds) controller.openDetail(it) },
             )
 
