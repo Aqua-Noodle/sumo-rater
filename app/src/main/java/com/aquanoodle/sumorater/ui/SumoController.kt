@@ -621,8 +621,13 @@ class SumoController(private val repo: RatingsRepository) {
         state = state.copy(tableFilter = filter)
     }
 
+    /** A new sort starts in its natural order; the same one again flips the direction. */
     fun setTableSort(sort: TableSort) {
-        state = state.copy(tableSort = sort)
+        state = if (sort == state.tableSort) {
+            state.copy(tableSortReversed = !state.tableSortReversed)
+        } else {
+            state.copy(tableSort = sort, tableSortReversed = false)
+        }
     }
 
     /** Days of [bashoId] with a pre-rating that contradicts the result: red calendar dot. */

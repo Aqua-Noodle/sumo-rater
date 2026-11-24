@@ -70,6 +70,7 @@ fun TableScreen(
     kimariteOptions: List<String>,
     filter: BoutFilter,
     sort: TableSort,
+    sortReversed: Boolean = false,
     onFilter: (BoutFilter) -> Unit,
     onSort: (TableSort) -> Unit,
 ) {
@@ -113,6 +114,7 @@ fun TableScreen(
                         kimariteOptions = kimariteOptions,
                         filter = filter,
                         sort = sort,
+                        sortReversed = sortReversed,
                         onFilter = onFilter,
                         onSort = onSort,
                     )
@@ -215,6 +217,7 @@ private fun FilterBar(
     kimariteOptions: List<String>,
     filter: BoutFilter,
     sort: TableSort,
+    sortReversed: Boolean,
     onFilter: (BoutFilter) -> Unit,
     onSort: (TableSort) -> Unit,
 ) {
@@ -288,7 +291,8 @@ private fun FilterBar(
                 style = TextStyle(fontFamily = Archivo, fontSize = 10.sp, letterSpacing = 0.14f.em, color = colors.faint),
             )
             Segmented(
-                options = TableSort.entries.map { it to it.label },
+                // The selected sort shows its direction; tapping it again flips it.
+                options = TableSort.entries.map { it to if (it == sort) it.label + if (sortReversed) " ↑" else " ↓" else it.label },
                 selected = sort,
                 onSelect = onSort,
             )

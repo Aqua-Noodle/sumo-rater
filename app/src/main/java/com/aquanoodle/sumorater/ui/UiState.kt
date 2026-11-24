@@ -37,6 +37,8 @@ data class UiState(
     /** "My ratings" search and filters. */
     val tableFilter: BoutFilter = BoutFilter(),
     val tableSort: TableSort = TableSort.SCORE,
+    /** Tapping the selected sort again flips it. */
+    val tableSortReversed: Boolean = false,
     val bestScope: BestScope = BestScope.BASHO,
     /** Day-15 lineups per division, offered when adding a playoff bout by hand. */
     val playoffRoster: Map<String, List<Wrestler>> = emptyMap(),

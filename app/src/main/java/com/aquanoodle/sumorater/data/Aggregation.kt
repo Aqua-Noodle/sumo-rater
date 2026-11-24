@@ -122,6 +122,8 @@ fun overviewRows(
     ratings: Map<String, Rating>,
     filter: BoutFilter,
     sort: TableSort,
+    /** Flip the order: lowest rank / score first, Z–A, fewest bouts first. */
+    reversed: Boolean = false,
 ): List<RikishiAggregate> {
     val inScope = if (filter.bashoId == null) ratings else ratings.filterValues { it.bashoId == filter.bashoId }
     val current = perRikishi(inScope).mapValues { (_, agg) ->
@@ -135,12 +137,13 @@ fun overviewRows(
         val (rank, division) = current[row.id] ?: return@mapNotNull null
         if (filter.div != null && division != filter.div) null else row.copy(rank = rank)
     }
-    return when (sort) {
+    val sorted = when (sort) {
         TableSort.SCORE -> rows.sortedWith(compareByDescending<RikishiAggregate> { it.avgN }.thenByDescending { it.count })
         TableSort.RANK -> rows.sortedWith(compareBy<RikishiAggregate> { rankSortKey(it.rank) }.thenBy { it.name })
         TableSort.NAME -> rows.sortedBy { it.name.lowercase() }
         TableSort.BOUTS -> rows.sortedWith(compareByDescending<RikishiAggregate> { it.count }.thenByDescending { it.avgN })
     }
+    return if (reversed) sorted.reversed() else sorted
 }
 
 enum class BestScope(val label: String) { DAY("Day"), BASHO("Basho"), ALL("All time") }

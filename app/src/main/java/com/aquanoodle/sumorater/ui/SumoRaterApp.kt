@@ -245,7 +245,7 @@ fun SumoRaterApp() {
             )
 
             Screen.TABLE -> {
-              val rows = overviewRows(state.ratings, state.tableFilter, state.tableSort)
+              val rows = overviewRows(state.ratings, state.tableFilter, state.tableSort, state.tableSortReversed)
               TableScreen(
                 rows = rows,
                 photos = state.photos,
@@ -258,6 +258,7 @@ fun SumoRaterApp() {
                 kimariteOptions = kimariteOptions(state.ratings),
                 filter = state.tableFilter,
                 sort = state.tableSort,
+                sortReversed = state.tableSortReversed,
                 onFilter = controller::setTableFilter,
                 onSort = controller::setTableSort,
               )
@@ -277,8 +278,8 @@ fun SumoRaterApp() {
             Screen.DETAIL -> {
                 val aggregate = state.selected?.let { controller.perRikishiMap()[it] }
                 // Neighbours in the My ratings list as currently filtered and sorted.
-                val listIds = remember(state.ratings, state.tableFilter, state.tableSort) {
-                    overviewRows(state.ratings, state.tableFilter, state.tableSort).map { it.id }
+                val listIds = remember(state.ratings, state.tableFilter, state.tableSort, state.tableSortReversed) {
+                    overviewRows(state.ratings, state.tableFilter, state.tableSort, state.tableSortReversed).map { it.id }
                 }
                 val at = aggregate?.let { listIds.indexOf(it.id) } ?: -1
                 if (aggregate != null) {
